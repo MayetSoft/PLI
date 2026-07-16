@@ -71,16 +71,18 @@ def sign_session(pepper: bytes, round_id: int, handle: bytes, now: datetime | No
     now = now or _utcnow()
     expires = int((now + SESSION_TTL).timestamp())
     payload = f"{round_id}.{expires}.{handle.hex()}".encode()
-    sig = hmac.new(_session_key(pepper), payload, hashlib.sha256).digest()
-    return base64.urlsafe_b64encode(payload + b"." + sig).decode()
+    sig = hmac.new(_session_key(pepper), payload, hashlib.sha256).hexdigest()
+    # Payload and signature are separately encoded: raw signature bytes may
+    # themselves contain the separator, which would corrupt the split.
+    return base64.urlsafe_b64encode(payload).decode() + "." + sig
 
 
 def verify_session(pepper: bytes, value: str, now: datetime | None = None) -> tuple[int, bytes] | None:
     now = now or _utcnow()
     try:
-        raw = base64.urlsafe_b64decode(value.encode())
-        payload, sig = raw.rsplit(b".", 1)
-        expected = hmac.new(_session_key(pepper), payload, hashlib.sha256).digest()
+        payload_b64, sig = value.rsplit(".", 1)
+        payload = base64.urlsafe_b64decode(payload_b64.encode())
+        expected = hmac.new(_session_key(pepper), payload, hashlib.sha256).hexdigest()
         if not hmac.compare_digest(sig, expected):
             return None
         round_id_s, expires_s, handle_hex = payload.decode().split(".")

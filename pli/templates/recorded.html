@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
 
-<p>Recorded. Nothing more will happen until Saturday.</p>
+<p>Recorded. Nothing more will happen until {% if mode == 'weekly' %}Saturday{% else %}the reveal{% endif %}.</p>
 
 {% endblock %}

@@ -8,11 +8,11 @@
   <div class="warn">
     <p>This is a one-way door. Once submitted, a name cannot be viewed,
     changed, or withdrawn — not even by you. If the feeling is mutual, you
-    both hear about it Saturday morning. If it isn't, no one ever knows,
-    including them.</p>
+    both hear about it {% if mode == 'weekly' %}Saturday morning{% else %}at
+    the reveal{% endif %}. If it isn't, no one ever knows, including them.</p>
   </div>
 
-  <form method="post" action="/declare">
+  <form method="post" action="{{ base_path }}/declare">
     {% for _ in range(remaining) %}
     <input type="email" name="targets"
            placeholder="their email address"
@@ -26,7 +26,7 @@
   they have is not something this page will ever tell you.</p>
 {% else %}
   <p>Your three declarations are sealed. Nothing more will happen until
-  Saturday.</p>
+  {% if mode == 'weekly' %}Saturday{% else %}the reveal{% endif %}.</p>
 {% endif %}
 
 {% endblock %}

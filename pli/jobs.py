@@ -1,4 +1,13 @@
-"""Round jobs, callable from APScheduler or a cron container:
+"""Round jobs, callable from APScheduler or a cron container.
+
+The scheduler runs `tick` once a minute: it keeps weekly cohorts on the
+original Monday/Friday/Saturday cadence and advances custom-timeline
+events at their own opens/closes/reveal instants.
+
+    python -m pli.jobs tick    # advance everything that is due (run every minute)
+
+The original fixed commands still work for a plain-cron deployment of a
+single weekly community:
 
     python -m pli.jobs open    # Monday 00:00 Europe/Paris
     python -m pli.jobs close   # Friday 23:59
@@ -52,12 +61,24 @@ def run_reveal(settings: Settings) -> int:
         conn.close()
 
 
+def run_tick(settings: Settings) -> dict[str, int]:
+    conn = db.connect(settings.db_path)
+    try:
+        db.init_db(conn)
+        return rounds.tick(conn, KeyStore(settings.keys_dir), make_mailer(settings))
+    finally:
+        conn.close()
+
+
 def main(argv: list[str]) -> int:
-    if len(argv) != 1 or argv[0] not in ("open", "close", "reveal"):
-        print("usage: python -m pli.jobs {open|close|reveal}", file=sys.stderr)
+    if len(argv) != 1 or argv[0] not in ("open", "close", "reveal", "tick"):
+        print("usage: python -m pli.jobs {tick|open|close|reveal}", file=sys.stderr)
         return 2
     settings = Settings.from_env()
-    if argv[0] == "open":
+    if argv[0] == "tick":
+        stats = run_tick(settings)
+        print(" ".join(f"{k}={v}" for k, v in stats.items()))
+    elif argv[0] == "open":
         print(f"round {run_open(settings)} open")
     elif argv[0] == "close":
         print(f"close: {run_close(settings)}")

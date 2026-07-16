@@ -1,33 +1,74 @@
 {% extends "base.html" %}
 {% block content %}
 
-{% if round_status == 'open' %}
-  <p>A round is open. It closes Friday at 23:59, Paris time.</p>
+{% if mode == 'event' %}
+  <p class="quiet">{{ label }}</p>
+{% endif %}
 
-  <form method="post" action="/join">
+{% if round_status == 'open' %}
+  {% if mode == 'weekly' %}
+  <p>A round is open. It closes Friday at 23:59, Paris time.</p>
+  {% else %}
+  <p>The round is open. It closes {{ closes_fmt }}.
+     Reveal is {{ reveal_fmt }}.</p>
+  {% endif %}
+
+  <form method="post" action="{{ base_path }}/join">
     <input type="email" name="email" required
-           placeholder="your institutional address"
+           placeholder="{% if mode == 'weekly' %}your institutional address{% else %}your email address{% endif %}"
            autocomplete="off" autocapitalize="none" spellcheck="false">
+    {% if join_code_required %}
+    <input type="text" name="code" required
+           placeholder="event code"
+           autocomplete="off" autocapitalize="none" spellcheck="false">
+    {% endif %}
     <button type="submit">Send me a sign-in link</button>
   </form>
+{% elif round_status == 'scheduled' %}
+  <p>The round opens {{ opens_fmt }} and closes {{ closes_fmt }}.
+     Reveal is {{ reveal_fmt }}.</p>
 {% elif round_status == 'closed' %}
+  {% if mode == 'weekly' %}
   <p>This week's round is closed. Reveal is Saturday at 08:00, Paris time.</p>
+  {% else %}
+  <p>The round is closed. Reveal is {{ reveal_fmt }}.</p>
+  {% endif %}
 {% elif round_status == 'voided' %}
+  {% if mode == 'weekly' %}
   <p>No round this week.</p>
+  {% else %}
+  <p>This round did not reach its threshold. Nothing ran, and everything
+  was deleted.</p>
+  {% endif %}
+{% elif round_status == 'revealed' and mode == 'event' %}
+  <p>This round has concluded. Everything has been deleted.</p>
 {% else %}
+  {% if mode == 'weekly' %}
   <p>No round this week. The next one opens Monday at 00:00, Paris time.</p>
+  {% else %}
+  <p>No round is scheduled here yet.</p>
+  {% endif %}
 {% endif %}
 
 <hr class="rule">
 
 <h2>How it works</h2>
 <ol>
+  {% if mode == 'weekly' %}
   <li>A round opens Monday and closes Friday night.</li>
+  {% else %}
+  <li>The round opens and closes at the times above.</li>
+  {% endif %}
   <li>During the round, you may name up to three people by email address.
       The three are final — no edits, no withdrawals, no viewing your list.</li>
   <li>The people you name are never told. Not now, not later, not ever.</li>
+  {% if mode == 'weekly' %}
   <li>Saturday morning, if two people named each other, each receives the
       other's address by email. One message. That is all.</li>
+  {% else %}
+  <li>At reveal time, if two people named each other, each receives the
+      other's address by email. One message. That is all.</li>
+  {% endif %}
   <li>Everything else is deleted, unread and unmatched. Silence.</li>
 </ol>
 
@@ -38,7 +79,7 @@ everything is deleted. Nothing is revealed to anyone.</p>
 <p>Addresses are stored as keyed hashes and encrypted blobs, so a copy of
 the database alone reveals nothing. But the operator holds the key material
 and could, technically, reconstruct who named whom. The operator is one
-person. The graph is destroyed Saturday morning. The source code is public.
+person. The graph is destroyed at reveal. The source code is public.
 That is the trust you are extending. If that is not enough — and that is a
 legitimate position — do not play.</p>
 

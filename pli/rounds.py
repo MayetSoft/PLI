@@ -1,5 +1,12 @@
-"""Round lifecycle: open Monday 00:00, close Friday 23:59, reveal
-Saturday 08:00 (Europe/Paris).
+"""Round lifecycle.
+
+The default (a 'weekly' cohort) runs the original cadence: open Monday
+00:00, close Friday 23:59, reveal Saturday 08:00 (Europe/Paris). A
+'custom' cohort — an event — carries its own opens/closes/reveal
+timestamps on the round row; a conference can run over three days, a
+speed-dating event over two hours. Either way the state machine and the
+invariants are identical: scheduled → open → closed → revealed | voided,
+matching is scoped to a single round, and nothing survives the reveal.
 
 The reveal is the heart of the product: compute reciprocal pairs, mail
 each half of a pair the other's address, then delete everything —
@@ -73,6 +80,42 @@ def open_round(
     if row["status"] == "open":
         keystore.create(row["id"])
     return row["id"]
+
+
+def schedule_round(
+    conn: sqlite3.Connection,
+    keystore: KeyStore,
+    cohort_id: str,
+    opens: datetime,
+    closes: datetime,
+    reveal: datetime,
+    now: datetime | None = None,
+) -> int:
+    """Create a round on an arbitrary timeline (a 'custom' event).
+
+    reveal may equal closes (a speed-dating event reveals at the buzzer)
+    but can never precede it — a reveal inside an open round would be a
+    mid-round signal, which is the thing this product must never emit.
+    """
+    now = (now or paris_now()).astimezone(PARIS)
+    opens, closes, reveal = (
+        d.astimezone(PARIS) for d in (opens, closes, reveal)
+    )
+    if not (opens < closes <= reveal):
+        raise ValueError("timeline must satisfy opens < closes <= reveal")
+    if closes <= now:
+        raise ValueError("round would already be over")
+    status = "open" if opens <= now else "scheduled"
+    cur = conn.execute(
+        "INSERT INTO rounds (cohort_id, opens_at, closes_at, reveal_at, status)"
+        " VALUES (?, ?, ?, ?, ?)",
+        (cohort_id, opens.isoformat(), closes.isoformat(), reveal.isoformat(), status),
+    )
+    conn.commit()
+    round_id = cur.lastrowid
+    if status == "open":
+        keystore.create(round_id)
+    return round_id
 
 
 def current_open_round(conn: sqlite3.Connection, cohort_id: str) -> sqlite3.Row | None:
@@ -164,3 +207,60 @@ def reveal_round(
         keystore.destroy(round_id)
         db.vacuum(conn)
     return pairs
+
+
+def _dt(iso: str) -> datetime:
+    return datetime.fromisoformat(iso)
+
+
+def ensure_weekly_rounds(
+    conn: sqlite3.Connection, keystore: KeyStore, now: datetime
+) -> None:
+    """Keep the original weekly cadence for every 'weekly' cohort:
+    this week's round exists whenever we are inside Monday 00:00 –
+    Friday 23:59. Self-healing: a missed Monday tick is repaired by the
+    next tick."""
+    opens, closes, _ = week_schedule(now)
+    if not (opens <= now < closes):
+        return
+    for row in conn.execute("SELECT id FROM cohorts WHERE schedule = 'weekly'").fetchall():
+        open_round(conn, keystore, row["id"], now)
+
+
+def tick(
+    conn: sqlite3.Connection,
+    keystore: KeyStore,
+    mailer: Mailer,
+    now: datetime | None = None,
+) -> dict[str, int]:
+    """Advance every round that is due, on its own timeline. Run once a
+    minute. Replaces fixed cron positions: the schedule lives in the
+    data, not in the crontab."""
+    now = (now or paris_now()).astimezone(PARIS)
+    stats = {"opened": 0, "closed": 0, "revealed": 0, "voided": 0}
+    ensure_weekly_rounds(conn, keystore, now)
+
+    for row in conn.execute("SELECT * FROM rounds WHERE status = 'scheduled'").fetchall():
+        if now >= _dt(row["closes_at"]):
+            # Never opened and already past close (scheduler outage):
+            # nothing was collected, nothing runs. Void quietly.
+            _purge(conn, row["id"], "voided")
+            keystore.destroy(row["id"])
+            stats["voided"] += 1
+        elif now >= _dt(row["opens_at"]):
+            with conn:
+                conn.execute("UPDATE rounds SET status = 'open' WHERE id = ?", (row["id"],))
+            keystore.create(row["id"])
+            stats["opened"] += 1
+
+    for row in conn.execute("SELECT * FROM rounds WHERE status = 'open'").fetchall():
+        if now >= _dt(row["closes_at"]):
+            outcome = close_round(conn, keystore, row["id"])
+            stats["voided" if outcome == "voided" else "closed"] += 1
+
+    for row in conn.execute("SELECT * FROM rounds WHERE status = 'closed'").fetchall():
+        if now >= _dt(row["reveal_at"]):
+            reveal_round(conn, keystore, mailer, row["id"])
+            stats["revealed"] += 1
+
+    return stats

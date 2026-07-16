@@ -26,8 +26,10 @@ CREATE TABLE IF NOT EXISTS rounds (
 CREATE TABLE IF NOT EXISTS cohorts (
   id            TEXT PRIMARY KEY,
   label         TEXT NOT NULL,
-  email_domains TEXT NOT NULL,         -- JSON array, e.g. ["etu.uca.fr"]
-  min_cohort    INTEGER NOT NULL DEFAULT 100
+  email_domains TEXT NOT NULL,         -- JSON array; [] = any domain (join code gates instead)
+  min_cohort    INTEGER NOT NULL DEFAULT 100,
+  schedule      TEXT NOT NULL DEFAULT 'weekly',  -- weekly | custom
+  join_code_hash BLOB                  -- HMAC(pepper, "code:" + code), optional
 );
 
 -- One row per participant per round. Deleted at reveal.
@@ -67,6 +69,15 @@ def connect(db_path: str) -> sqlite3.Connection:
 
 def init_db(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA)
+    # Additive migrations for databases created before the platform columns.
+    for ddl in (
+        "ALTER TABLE cohorts ADD COLUMN schedule TEXT NOT NULL DEFAULT 'weekly'",
+        "ALTER TABLE cohorts ADD COLUMN join_code_hash BLOB",
+    ):
+        try:
+            conn.execute(ddl)
+        except sqlite3.OperationalError:
+            pass  # column already exists
     conn.commit()
 
 
@@ -76,10 +87,24 @@ def create_cohort(
     label: str,
     email_domains: list[str],
     min_cohort: int = 100,
+    schedule: str = "weekly",
+    join_code_hash: bytes | None = None,
 ) -> None:
+    if schedule not in ("weekly", "custom"):
+        raise ValueError("schedule must be 'weekly' or 'custom'")
+    if not email_domains and join_code_hash is None:
+        raise ValueError("a cohort needs email domains, a join code, or both")
     conn.execute(
-        "INSERT OR REPLACE INTO cohorts (id, label, email_domains, min_cohort) VALUES (?, ?, ?, ?)",
-        (cohort_id, label, json.dumps(sorted(d.lower() for d in email_domains)), min_cohort),
+        "INSERT OR REPLACE INTO cohorts (id, label, email_domains, min_cohort, schedule, join_code_hash)"
+        " VALUES (?, ?, ?, ?, ?, ?)",
+        (
+            cohort_id,
+            label,
+            json.dumps(sorted(d.lower() for d in email_domains)),
+            min_cohort,
+            schedule,
+            join_code_hash,
+        ),
     )
     conn.commit()
 

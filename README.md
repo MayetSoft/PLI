@@ -44,10 +44,46 @@ Round jobs, runnable by APScheduler (`python -m pli.scheduler`, included in
 docker-compose) or plain cron:
 
 ```sh
-python -m pli.jobs open    # Monday 00:00 Europe/Paris
-python -m pli.jobs close   # Friday 23:59 — voids the round below min_cohort
-python -m pli.jobs reveal  # Saturday 08:00 — mails pairs, deletes everything
+python -m pli.jobs tick    # advance everything that is due — run every minute
 ```
+
+The scheduler is a single minute tick: the timeline lives in the data, not
+the crontab. The original fixed commands (`open`/`close`/`reveal`) still
+exist for a plain-cron deployment of a single weekly community.
+
+## Events — same product, own timeline
+
+The default community at the root URL runs the original weekly cadence:
+opens Monday 00:00, closes Friday 23:59, reveals Saturday 08:00
+(Europe/Paris). Nothing about it changed.
+
+An organizer can additionally run *events*: the identical mechanic on a
+custom timeline — a conference running Wednesday-to-Friday with a reveal
+before the closing party, a speed-dating night compressed into two hours.
+
+```sh
+python -m pli.cli create-event --id devconf-2026 --label "DevConf 2026" \
+    --join-code sesame --min-cohort 20 \
+    --opens "2026-09-10T09:00" --closes "2026-09-12T18:00" --reveal "2026-09-12T20:00"
+```
+
+- The event page is served, unlisted, at `/e/devconf-2026`. It is reached
+  by the link the organizer distributes, and it lists nothing about any
+  other event or community.
+- Access is gated by `--domains`, a `--join-code` (for crowds with no
+  shared email domain — the code is stored as a keyed hash and a wrong
+  code is indistinguishable from a right one in the response), or both.
+- The reveal can never precede the close (`opens < closes <= reveal` is
+  enforced) — a reveal inside an open round would be a mid-round signal.
+- **Every invariant applies per event, unchanged.** Same handlers, same
+  escrow, same reveal job, same delete-and-VACUUM. Matching is scoped to a
+  single round, so two rounds can never leak into each other; naming
+  someone at a conference and being named by them in the weekly round
+  reveals nothing to anyone.
+- Event creation is deliberately operator-CLI, not self-serve. An
+  organizer signup flow is an auth and abuse surface of its own; until it
+  is designed with the same care as the rest, the operator provisions
+  events by hand.
 
 ## Deployment
 

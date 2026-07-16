@@ -1,5 +1,10 @@
-"""In-process scheduler (the alternative is a plain cron container
-calling `python -m pli.jobs ...` — see docker-compose.yml).
+"""In-process scheduler (the alternative is plain cron running
+`python -m pli.jobs tick` every minute — see docker-compose.yml).
+
+A single minute tick drives everything: weekly cohorts keep their
+Monday 00:00 / Friday 23:59 / Saturday 08:00 cadence, and custom-timeline
+events open, close, and reveal at their own instants. The schedule lives
+in the data, not the crontab.
 
 Run alongside the web app:  python -m pli.scheduler
 """
@@ -17,19 +22,9 @@ from .rounds import PARIS
 def build_scheduler(settings: Settings) -> BlockingScheduler:
     scheduler = BlockingScheduler(timezone=PARIS)
     scheduler.add_job(
-        lambda: jobs.run_open(settings),
-        CronTrigger(day_of_week="mon", hour=0, minute=0, timezone=PARIS),
-        name="open-round",
-    )
-    scheduler.add_job(
-        lambda: jobs.run_close(settings),
-        CronTrigger(day_of_week="fri", hour=23, minute=59, timezone=PARIS),
-        name="close-round",
-    )
-    scheduler.add_job(
-        lambda: jobs.run_reveal(settings),
-        CronTrigger(day_of_week="sat", hour=8, minute=0, timezone=PARIS),
-        name="reveal-round",
+        lambda: jobs.run_tick(settings),
+        CronTrigger(minute="*", timezone=PARIS),
+        name="tick",
     )
     return scheduler
 

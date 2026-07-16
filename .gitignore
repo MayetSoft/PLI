@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.hypothesis/
+*.egg-info/
+.venv/
+
+# Runtime state — never committed, never backed up (see HANDOFF.md §7 Retention)
+data/
+keys/
+*.db
+*.db-wal
+*.db-shm
+.env

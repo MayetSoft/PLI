@@ -28,12 +28,20 @@ PARIS = ZoneInfo("Europe/Paris")
 MAX_DECLARATIONS = 3
 
 MATCH_SUBJECT = "PLI — it was mutual"
-MATCH_BODY = """You named someone this week. They named you.
+MATCH_BODY = """You named someone. They named you.
 
 {other}
-
+{note}
 This is the only message either of you will receive. From here, the
 conversation is yours. Nothing about this round has been retained.
+"""
+
+# The organizer's note is plain text inside our fixed template, clearly
+# attributed. Organizers never author whole emails: a template editor on
+# a product that mails magic links is a phishing kit.
+ORGANIZER_NOTE = """
+A note from the organizer:
+{intro}
 """
 
 RECIPROCAL_PAIRS_SQL = """
@@ -141,6 +149,14 @@ def _purge(conn: sqlite3.Connection, round_id: int, status: str) -> None:
         conn.execute("UPDATE rounds SET status = ? WHERE id = ?", (status, round_id))
 
 
+def void_round(conn: sqlite3.Connection, keystore: KeyStore, round_id: int) -> None:
+    """Delete everything, reveal nothing, notify nobody. Usable at any
+    point in a round's life — silence is always available."""
+    _purge(conn, round_id, "voided")
+    keystore.destroy(round_id)
+    db.vacuum(conn)
+
+
 def close_round(conn: sqlite3.Connection, keystore: KeyStore, round_id: int) -> str:
     """Friday 23:59. Under threshold: void — delete all, notify nobody of
     anything but 'no round this week' on the homepage. A voided round is
@@ -180,6 +196,15 @@ def reveal_round(
     round_row = conn.execute("SELECT * FROM rounds WHERE id = ?", (round_id,)).fetchone()
     if round_row is None or round_row["status"] != "closed":
         return 0
+    cohort = conn.execute(
+        "SELECT * FROM cohorts WHERE id = ?", (round_row["cohort_id"],)
+    ).fetchone()
+    if cohort is not None and cohort["is_suspended"]:
+        # Suspended pending abuse review at reveal time: emit silence.
+        void_round(conn, keystore, round_id)
+        return 0
+    intro = (cohort["mail_intro"] or "").strip() if cohort is not None else ""
+    note = ORGANIZER_NOTE.format(intro=intro) if intro else ""
     pairs = 0
     try:
         round_key = keystore.load(round_id)
@@ -199,7 +224,8 @@ def reveal_round(
                 pairs += 1
                 for me, other in ((a, b), (b, a)):
                     try:
-                        mailer.send(Mail(to=me, subject=MATCH_SUBJECT, body=MATCH_BODY.format(other=other)))
+                        mailer.send(Mail(to=me, subject=MATCH_SUBJECT,
+                                         body=MATCH_BODY.format(other=other, note=note)))
                     except Exception:
                         pass  # a failed send is a bad week; deletion still runs
     finally:

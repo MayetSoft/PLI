@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h2>Your events</h2>
+
+{% if events %}
+  {% for e in events %}
+  <p>
+    <strong>{{ e.cohort.label }}</strong>
+    {% if e.cohort.is_suspended %}<span class="quiet"> — paused pending review</span>{% endif %}
+    <br>
+    <span class="quiet">Share link: {{ base_url }}/e/{{ e.cohort.id }}</span><br>
+    {% if e.round %}
+      <span class="quiet">Round: {{ e.round.status }}
+      {%- if e.round.status in ('scheduled', 'open', 'closed') %},
+      {{ e.participants }} signed up (threshold {{ e.cohort.min_cohort }})
+      {%- endif %}</span><br>
+    {% else %}
+      <span class="quiet">No round yet.</span><br>
+    {% endif %}
+    <a href="/org/events/{{ e.cohort.id }}/edit">Configure</a>
+  </p>
+  {% endfor %}
+{% else %}
+  <p>No events yet.</p>
+{% endif %}
+
+<p><a href="/org/events/new">Create an event</a></p>
+
+<form method="post" action="/org/logout"><button type="submit">Sign out</button></form>
+
+{% endblock %}

@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h2>Public events</h2>
+
+{% if events %}
+  {% for e in events %}
+  <p>
+    <a href="/e/{{ e.id }}">{{ e.label }}</a><br>
+    {% if e.round_status == 'open' %}
+    <span class="quiet">Open now — closes {{ e.closes_fmt }}.</span>
+    {% else %}
+    <span class="quiet">Opens {{ e.opens_fmt }}.</span>
+    {% endif %}
+    {% if e.description %}<br><span class="quiet">{{ e.description }}</span>{% endif %}
+  </p>
+  {% endfor %}
+{% else %}
+  <p>No public events at the moment. Most events are private — you reach
+  them through the link their organizer circulates.</p>
+{% endif %}
+
+<p><a href="/about">What is this?</a></p>
+
+{% endblock %}

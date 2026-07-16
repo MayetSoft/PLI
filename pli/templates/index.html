@@ -3,9 +3,12 @@
 
 {% if mode == 'event' %}
   <p class="quiet">{{ label }}</p>
+  {% if description %}<p>{{ description }}</p>{% endif %}
 {% endif %}
 
-{% if round_status == 'open' %}
+{% if suspended %}
+  <p>This event is paused pending review.</p>
+{% elif round_status == 'open' %}
   {% if mode == 'weekly' %}
   <p>A round is open. It closes Friday at 23:59, Paris time.</p>
   {% else %}
@@ -85,5 +88,10 @@ legitimate position — do not play.</p>
 
 <p class="quiet">No profiles. No photos. No chat. No browsing. No scores.
 If you both said it, you both find out. Otherwise, nothing happened.</p>
+
+{% if mode == 'event' %}
+<p class="quiet"><a href="{{ base_path }}/report">Report this event</a>
+· <a href="/about">What is PLI?</a></p>
+{% endif %}
 
 {% endblock %}

@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h2>Report this event</h2>
+
+<p>If this event impersonates an organization, harasses people, or is
+being used for something it shouldn't be, tell us. Reports are anonymous.
+Enough independent reports pause the event automatically pending review.</p>
+
+<form method="post" action="{{ base_path }}/report">
+  <p>
+    <select name="reason">
+      {% for r in reasons %}<option value="{{ r }}">{{ r }}</option>{% endfor %}
+    </select>
+  </p>
+  <p><textarea name="detail" rows="4" style="width:100%; font:inherit"
+     placeholder="anything that helps us assess it (optional)"></textarea></p>
+  <button type="submit">Report</button>
+</form>
+
+{% endblock %}

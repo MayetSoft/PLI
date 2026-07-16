@@ -55,6 +55,35 @@ CREATE TABLE IF NOT EXISTS magic_links (
   expires_at    TEXT NOT NULL,
   used_at       TEXT
 );
+
+-- Organizers are accountable parties, not participants: their address is
+-- an ordinary business record (abuse contact), stored in the clear. They
+-- never see participant identities — only counts and round status.
+CREATE TABLE IF NOT EXISTS organizers (
+  id            INTEGER PRIMARY KEY,
+  email         TEXT NOT NULL UNIQUE,   -- normalised
+  created_at    TEXT NOT NULL,
+  status        TEXT NOT NULL DEFAULT 'active'  -- active | banned
+);
+
+CREATE TABLE IF NOT EXISTS org_links (
+  token_hash    BLOB PRIMARY KEY,
+  email         TEXT NOT NULL,
+  expires_at    TEXT NOT NULL,
+  used_at       TEXT
+);
+
+-- Abuse flags on events. One per reporter (keyed IP hash) per event;
+-- contains no participant data. Reaching the threshold auto-suspends the
+-- event pending operator review.
+CREATE TABLE IF NOT EXISTS flags (
+  cohort_id     TEXT NOT NULL,
+  reporter      BLOB NOT NULL,          -- HMAC(pepper, "flag:" + ip) — dedup only
+  reason        TEXT NOT NULL,
+  detail        TEXT NOT NULL DEFAULT '',
+  created_at    TEXT NOT NULL,
+  PRIMARY KEY (cohort_id, reporter)
+) WITHOUT ROWID;
 """
 
 
@@ -73,6 +102,11 @@ def init_db(conn: sqlite3.Connection) -> None:
     for ddl in (
         "ALTER TABLE cohorts ADD COLUMN schedule TEXT NOT NULL DEFAULT 'weekly'",
         "ALTER TABLE cohorts ADD COLUMN join_code_hash BLOB",
+        "ALTER TABLE cohorts ADD COLUMN organizer_id INTEGER",
+        "ALTER TABLE cohorts ADD COLUMN visibility TEXT NOT NULL DEFAULT 'private'",
+        "ALTER TABLE cohorts ADD COLUMN description TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE cohorts ADD COLUMN mail_intro TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE cohorts ADD COLUMN is_suspended INTEGER NOT NULL DEFAULT 0",
     ):
         try:
             conn.execute(ddl)
@@ -89,14 +123,22 @@ def create_cohort(
     min_cohort: int = 100,
     schedule: str = "weekly",
     join_code_hash: bytes | None = None,
+    organizer_id: int | None = None,
+    visibility: str = "private",
+    description: str = "",
+    mail_intro: str = "",
 ) -> None:
     if schedule not in ("weekly", "custom"):
         raise ValueError("schedule must be 'weekly' or 'custom'")
+    if visibility not in ("public", "private"):
+        raise ValueError("visibility must be 'public' or 'private'")
     if not email_domains and join_code_hash is None:
         raise ValueError("a cohort needs email domains, a join code, or both")
     conn.execute(
-        "INSERT OR REPLACE INTO cohorts (id, label, email_domains, min_cohort, schedule, join_code_hash)"
-        " VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT OR REPLACE INTO cohorts"
+        " (id, label, email_domains, min_cohort, schedule, join_code_hash,"
+        "  organizer_id, visibility, description, mail_intro, is_suspended)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)",
         (
             cohort_id,
             label,
@@ -104,14 +146,13 @@ def create_cohort(
             min_cohort,
             schedule,
             join_code_hash,
+            organizer_id,
+            visibility,
+            description,
+            mail_intro,
         ),
     )
     conn.commit()
-
-
-def cohort_domains(conn: sqlite3.Connection, cohort_id: str) -> list[str]:
-    row = conn.execute("SELECT email_domains FROM cohorts WHERE id = ?", (cohort_id,)).fetchone()
-    return json.loads(row["email_domains"]) if row else []
 
 
 def vacuum(conn: sqlite3.Connection) -> None:

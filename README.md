@@ -25,7 +25,7 @@ change turns one red, the change is wrong.
 
 ```sh
 pip install -r requirements-dev.txt
-python -m pytest
+python -m pytest --cov=pli    # coverage is enforced at 100%
 ```
 
 Run locally (mail goes to stdout):
@@ -57,9 +57,13 @@ The default community at the root URL runs the original weekly cadence:
 opens Monday 00:00, closes Friday 23:59, reveals Saturday 08:00
 (Europe/Paris). Nothing about it changed.
 
-An organizer can additionally run *events*: the identical mechanic on a
-custom timeline — a conference running Wednesday-to-Friday with a reveal
-before the closing party, a speed-dating night compressed into two hours.
+Organizers additionally run *events*: the identical mechanic on a custom
+timeline — a conference running Wednesday-to-Friday with a reveal before
+the closing party, a speed-dating night compressed into two hours.
+
+Organizers are self-serve at `/org`: magic-link sign-in (no passwords),
+create and configure events in the browser, get the share URL, watch the
+signup count. Events can also be provisioned from the CLI:
 
 ```sh
 python -m pli.cli create-event --id devconf-2026 --label "DevConf 2026" \
@@ -67,23 +71,54 @@ python -m pli.cli create-event --id devconf-2026 --label "DevConf 2026" \
     --opens "2026-09-10T09:00" --closes "2026-09-12T18:00" --reveal "2026-09-12T20:00"
 ```
 
-- The event page is served, unlisted, at `/e/devconf-2026`. It is reached
-  by the link the organizer distributes, and it lists nothing about any
-  other event or community.
-- Access is gated by `--domains`, a `--join-code` (for crowds with no
-  shared email domain — the code is stored as a keyed hash and a wrong
-  code is indistinguishable from a right one in the response), or both.
-- The reveal can never precede the close (`opens < closes <= reveal` is
-  enforced) — a reveal inside an open round would be a mid-round signal.
-- **Every invariant applies per event, unchanged.** Same handlers, same
-  escrow, same reveal job, same delete-and-VACUUM. Matching is scoped to a
-  single round, so two rounds can never leak into each other; naming
-  someone at a conference and being named by them in the weekly round
-  reveals nothing to anyone.
-- Event creation is deliberately operator-CLI, not self-serve. An
-  organizer signup flow is an auth and abuse surface of its own; until it
-  is designed with the same care as the rest, the operator provisions
-  events by hand.
+- The event page is served at `/e/{id}` with the organizer's description.
+  **Private** events (the default) are unlisted, reached only by the link
+  the organizer circulates. **Public** events appear in the `/events`
+  directory while a round is scheduled or open.
+- Access is gated by email domains, a join code (for crowds with no
+  shared domain — the code is stored as a keyed hash and a wrong code is
+  indistinguishable from a right one in the response), or both.
+- Organizers see round status and a signup count. They never see a
+  roster, a declaration, or a match count — that data does not exist in a
+  form anyone can show them, which is also the coercion defence.
+- Custom email content is a plain-text note rendered inside the
+  platform's fixed templates and explicitly attributed to the organizer —
+  never a template editor. A template editor on a product that mails
+  magic links is a phishing kit.
+- **Guardrails on modification.** While a round is scheduled, everything
+  is editable. Once it opens: the opening time is fixed, close and reveal
+  can only be pushed later (people declared against the published times),
+  and `min_cohort` freezes (it is a published pre-commitment — no
+  adaptive lowering after seeing the count). The reveal can never precede
+  the close. Cancelling voids the round: everything deleted, nothing
+  revealed, nobody notified.
+- **Every participant-side invariant applies per event, unchanged.** Same
+  handlers, same escrow, same reveal job, same delete-and-VACUUM.
+  Matching is scoped to a single round, so two rounds can never leak into
+  each other.
+
+## Abuse flags
+
+Every event page carries an anonymous "Report this event" link (reasons:
+impersonation, harassment, spam, other). One flag per reporter per event
+(keyed IP hash, no reporter identity stored). At 3 independent flags the
+event auto-suspends pending review: joins and declarations stop, and a
+reveal falling due while suspended **voids** — deleted, revealing nothing,
+because silence is the only safe failure mode here too. Operator tooling:
+
+```sh
+python -m pli.cli flags                     # review queue
+python -m pli.cli suspend --id <event>
+python -m pli.cli unsuspend --id <event>    # also clears its flags
+python -m pli.cli ban-organizer --email <address>   # bans + suspends their events
+```
+
+## The public face
+
+With no default community configured, `/` is a landing page explaining
+the concept, linking the public directory (`/events`) and organizer
+sign-in (`/org`). With `PLI_COHORT_ID` set, `/` serves that community
+exactly as v1 did and the landing page lives at `/about`.
 
 ## Deployment
 

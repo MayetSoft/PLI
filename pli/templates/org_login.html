@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h2>Organizers</h2>
+
+<p>Sign in — or create an organizer account — with your email address.
+No password: we send a single-use link.</p>
+
+<form method="post" action="/org/login">
+  <input type="email" name="email" required placeholder="your email address"
+         autocomplete="email" autocapitalize="none" spellcheck="false">
+  <button type="submit">Send me a sign-in link</button>
+</form>
+
+<p class="quiet">Organizers configure events and see signup counts and
+round status. They never see who joined or who named whom — that
+information is not retained in a form anyone can show them.</p>
+
+{% endblock %}

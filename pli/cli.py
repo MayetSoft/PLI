@@ -21,7 +21,7 @@ import argparse
 import re
 from datetime import datetime
 
-from . import db, rounds
+from . import db, organizers, rounds
 from .config import Settings
 from .crypto import KeyStore, handle
 
@@ -35,10 +35,17 @@ def parse_dt(value: str) -> datetime:
     return dt
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="pli")
     sub = parser.add_subparsers(dest="cmd", required=True)
     sub.add_parser("init-db")
+
+    sub.add_parser("flags", help="list abuse flags")
+    for name in ("suspend", "unsuspend"):
+        p = sub.add_parser(name)
+        p.add_argument("--id", required=True, help="event/cohort id")
+    ban = sub.add_parser("ban-organizer", help="ban an organizer and suspend their events")
+    ban.add_argument("--email", required=True)
 
     cohort = sub.add_parser("create-cohort", help="weekly community (default product)")
     cohort.add_argument("--id", required=True)
@@ -56,7 +63,7 @@ def main() -> int:
     event.add_argument("--closes", required=True)
     event.add_argument("--reveal", required=True)
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     settings = Settings.from_env()
     conn = db.connect(settings.db_path)
     try:
@@ -83,6 +90,22 @@ def main() -> int:
                 parse_dt(args.opens), parse_dt(args.closes), parse_dt(args.reveal),
             )
             print(f"event {args.id} ready (round {round_id}) — share {settings.base_url}/e/{args.id}")
+        elif args.cmd == "flags":
+            rows = conn.execute(
+                "SELECT cohort_id, reason, detail, created_at FROM flags ORDER BY created_at"
+            ).fetchall()
+            for row in rows:
+                print(f"{row['created_at']}  {row['cohort_id']}  {row['reason']}  {row['detail']}")
+            print(f"{len(rows)} flag(s)")
+        elif args.cmd == "suspend":
+            organizers.set_suspended(conn, args.id, True)
+            print(f"{args.id} suspended")
+        elif args.cmd == "unsuspend":
+            organizers.set_suspended(conn, args.id, False)
+            print(f"{args.id} active (flags cleared)")
+        elif args.cmd == "ban-organizer":
+            n = organizers.ban_organizer(conn, args.email.strip().lower())
+            print(f"banned; {n} event(s) suspended")
         else:
             print("db ready")
     finally:

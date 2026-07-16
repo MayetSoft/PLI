@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block content %}
+
+<p>PLI is a sealed-envelope service for mutual interest. Everyone in a
+group privately names the people they hope feel the same. If two people
+name each other, each receives the other's email address. If not, nothing
+happens — and no one, including us in any practical sense we can avoid,
+ever finds out who named whom.</p>
+
+<h2>The rules, always</h2>
+<ol>
+  <li>You may name up to three people by email address. The three are
+      final — no edits, no withdrawals, no viewing your list.</li>
+  <li>The people you name are never told. Not now, not later, not ever.</li>
+  <li>At the published reveal time, mutual pairs — and only mutual
+      pairs — each receive the other's address. One message. That is all.</li>
+  <li>Everything else is deleted, unread and unmatched.</li>
+  <li>If a round doesn't reach its published threshold, it is voided and
+      everything is deleted. Nothing is revealed to anyone.</li>
+</ol>
+
+<h2>Take part</h2>
+<p>PLI runs as rounds inside communities and events: a campus week, a
+conference, a speed-dating night. You join through the link the organizer
+circulates. Some events are listed publicly:</p>
+<p><a href="/events">Browse public events</a></p>
+
+<h2>Run one</h2>
+<p>Organizers create an event, set its own timeline — opens, closes,
+reveal — restrict it to email domains or a join code, and circulate the
+link. Organizers see a signup count and the round status. They never see
+who joined, who named whom, or how many matched: that information is not
+retained in a form anyone can show them.</p>
+<p><a href="/org">Organizer sign-in</a></p>
+
+<h2>The trust you are extending</h2>
+<p>Addresses are stored as keyed hashes and encrypted blobs, so a copy of
+the database alone reveals nothing. But the operator holds the key material
+and could, technically, reconstruct who named whom during a live round.
+The graph is destroyed at reveal. The source code is public. That is the
+trust you are extending. If that is not enough — and that is a legitimate
+position — do not play.</p>
+
+<p class="quiet">No profiles. No photos. No chat. No browsing. No scores.
+If you both said it, you both find out. Otherwise, nothing happened.</p>
+
+{% endblock %}

@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block content %}
+
+{% if round_status == 'open' %}
+  <p>A round is open. It closes Friday at 23:59, Paris time.</p>
+
+  <form method="post" action="/join">
+    <input type="email" name="email" required
+           placeholder="your institutional address"
+           autocomplete="off" autocapitalize="none" spellcheck="false">
+    <button type="submit">Send me a sign-in link</button>
+  </form>
+{% elif round_status == 'closed' %}
+  <p>This week's round is closed. Reveal is Saturday at 08:00, Paris time.</p>
+{% elif round_status == 'voided' %}
+  <p>No round this week.</p>
+{% else %}
+  <p>No round this week. The next one opens Monday at 00:00, Paris time.</p>
+{% endif %}
+
+<hr class="rule">
+
+<h2>How it works</h2>
+<ol>
+  <li>A round opens Monday and closes Friday night.</li>
+  <li>During the round, you may name up to three people by email address.
+      The three are final — no edits, no withdrawals, no viewing your list.</li>
+  <li>The people you name are never told. Not now, not later, not ever.</li>
+  <li>Saturday morning, if two people named each other, each receives the
+      other's address by email. One message. That is all.</li>
+  <li>Everything else is deleted, unread and unmatched. Silence.</li>
+</ol>
+
+<p>If fewer than {{ min_cohort }} people sign up, the round is voided and
+everything is deleted. Nothing is revealed to anyone.</p>
+
+<h2>The trust you are extending</h2>
+<p>Addresses are stored as keyed hashes and encrypted blobs, so a copy of
+the database alone reveals nothing. But the operator holds the key material
+and could, technically, reconstruct who named whom. The operator is one
+person. The graph is destroyed Saturday morning. The source code is public.
+That is the trust you are extending. If that is not enough — and that is a
+legitimate position — do not play.</p>
+
+<p class="quiet">No profiles. No photos. No chat. No browsing. No scores.
+If you both said it, you both find out. Otherwise, nothing happened.</p>
+
+{% endblock %}

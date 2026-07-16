@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>PLI</title>
+  <style>
+    :root { --ink: #1c1c1c; --accent: #1f4a5f; --quiet: #6b6b6b; --paper: #fcfcfa; }
+    * { box-sizing: border-box; }
+    body {
+      font: 17px/1.65 Georgia, "Times New Roman", serif;
+      color: var(--ink); background: var(--paper);
+      max-width: 36rem; margin: 0 auto; padding: 4rem 1.5rem 6rem;
+    }
+    h1 { font-size: 1.6rem; font-weight: normal; letter-spacing: .03em; margin: 0 0 2.5rem; }
+    h1 a { color: var(--ink); text-decoration: none; }
+    h2 { font-size: 1.05rem; font-weight: normal; font-style: italic; margin: 2.5rem 0 .75rem; }
+    p, li { max-width: 34rem; }
+    a { color: var(--accent); }
+    ol { padding-left: 1.4rem; }
+    li { margin-bottom: .4rem; }
+    form { margin: 2rem 0; }
+    input[type=email] {
+      font: inherit; width: 100%; padding: .55rem .7rem; margin-bottom: .75rem;
+      border: 1px solid #bbb; border-radius: 2px; background: #fff;
+    }
+    button {
+      font: inherit; padding: .55rem 1.4rem; cursor: pointer;
+      color: #fff; background: var(--accent); border: none; border-radius: 2px;
+    }
+    .quiet { color: var(--quiet); font-size: .92rem; }
+    .rule { border: none; border-top: 1px solid #ddd; margin: 3rem 0; }
+    .warn {
+      border-left: 3px solid var(--accent); padding: .25rem 0 .25rem 1rem;
+      margin: 1.5rem 0;
+    }
+    footer { margin-top: 5rem; padding-top: 1rem; border-top: 1px solid #ddd; }
+    footer p { font-size: .85rem; color: var(--quiet); }
+  </style>
+</head>
+<body>
+  <h1><a href="/">PLI</a></h1>
+  {% block content %}{% endblock %}
+  <footer>
+    <p>Nothing here persists. Declarations are destroyed Saturday morning,
+    matched or not. There are no profiles, no history, no backups.</p>
+  </footer>
+</body>
+</html>

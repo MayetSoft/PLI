@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block content %}
+
+{% if remaining > 0 %}
+  <p>You may name up to three people this round.
+     You have {{ remaining }} remaining.</p>
+
+  <div class="warn">
+    <p>This is a one-way door. Once submitted, a name cannot be viewed,
+    changed, or withdrawn — not even by you. If the feeling is mutual, you
+    both hear about it Saturday morning. If it isn't, no one ever knows,
+    including them.</p>
+  </div>
+
+  <form method="post" action="/declare">
+    {% for _ in range(remaining) %}
+    <input type="email" name="targets"
+           placeholder="their email address"
+           autocomplete="off" autocapitalize="none" spellcheck="false">
+    {% endfor %}
+    <button type="submit">Seal</button>
+  </form>
+
+  <p class="quiet">Leave fields empty to keep declarations for later in the
+  week. The person you name does not need to have signed up — and whether
+  they have is not something this page will ever tell you.</p>
+{% else %}
+  <p>Your three declarations are sealed. Nothing more will happen until
+  Saturday.</p>
+{% endif %}
+
+{% endblock %}

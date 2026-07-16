@@ -1,0 +1,58 @@
+# PLI — web app + scheduler sharing one SQLite volume.
+#
+# Operational invariants (HANDOFF.md §7):
+#   - The pli-data volume must NEVER be included in any backup job.
+#     A backup is a crush graph that survived the reveal.
+#   - Traefik access logs must be disabled or filtered for this router.
+#   - PLI_PEPPER lives in .env on the host, never in this file, never in git.
+
+services:
+  pli:
+    build: .
+    restart: unless-stopped
+    environment:
+      PLI_PEPPER: ${PLI_PEPPER}
+      PLI_COHORT_ID: ${PLI_COHORT_ID}
+      PLI_BASE_URL: https://${PLI_HOST}
+      PLI_SECURE_COOKIES: "1"
+      PLI_MAILER: smtp
+      PLI_SMTP_HOST: ${PLI_SMTP_HOST}
+      PLI_SMTP_PORT: ${PLI_SMTP_PORT:-587}
+      PLI_SMTP_USER: ${PLI_SMTP_USER}
+      PLI_SMTP_PASSWORD: ${PLI_SMTP_PASSWORD}
+      PLI_MAIL_FROM: ${PLI_MAIL_FROM}
+    volumes:
+      - pli-data:/data
+    networks:
+      - traefik
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.pli.rule=Host(`${PLI_HOST}`)
+      - traefik.http.routers.pli.entrypoints=websecure
+      - traefik.http.routers.pli.tls.certresolver=letsencrypt
+      - traefik.http.services.pli.loadbalancer.server.port=8000
+
+  pli-scheduler:
+    build: .
+    restart: unless-stopped
+    command: ["python", "-m", "pli.scheduler"]
+    environment:
+      PLI_PEPPER: ${PLI_PEPPER}
+      PLI_COHORT_ID: ${PLI_COHORT_ID}
+      PLI_MAILER: smtp
+      PLI_SMTP_HOST: ${PLI_SMTP_HOST}
+      PLI_SMTP_PORT: ${PLI_SMTP_PORT:-587}
+      PLI_SMTP_USER: ${PLI_SMTP_USER}
+      PLI_SMTP_PASSWORD: ${PLI_SMTP_PASSWORD}
+      PLI_MAIL_FROM: ${PLI_MAIL_FROM}
+    volumes:
+      - pli-data:/data
+    networks:
+      - traefik
+
+volumes:
+  pli-data:
+
+networks:
+  traefik:
+    external: true

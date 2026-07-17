@@ -77,6 +77,9 @@ def create_app(
     settings = settings or Settings.from_env()
     mailer = mailer or make_mailer(settings)
     keystore = keystore or KeyStore(settings.keys_dir)
+    # The billing provider is the open-core seam: possibly a closed
+    # plugin, but only ever consulted through the open gates below.
+    provider = billing.load_provider(settings)
     templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
     limiter = RateLimiter()
 
@@ -91,6 +94,7 @@ def create_app(
     app.state.settings = settings
     app.state.mailer = mailer
     app.state.keystore = keystore
+    app.state.billing = provider
 
     platform_host = (urllib.parse.urlsplit(settings.base_url).hostname or "").lower()
 
@@ -840,8 +844,8 @@ def create_app(
             return render(
                 "org_dashboard.html", request,
                 org=org, events=events, base_url=settings.base_url,
-                billing_on=billing.enforced(settings),
-                is_free=(org["plan"] == "free"),
+                billing_on=provider.enforced(),
+                is_free=(billing.plan_of(provider, org) == billing.PLANS["free"]),
             )
         finally:
             conn.close()
@@ -854,7 +858,7 @@ def create_app(
             if org is None:
                 return RedirectResponse("/org", status_code=303)
             try:
-                url = billing.checkout_url(settings, org)
+                url = provider.checkout_url(org)
             except Exception:
                 url = None  # provider unreachable: land back on the dashboard
             return RedirectResponse(url or "/org/dashboard", status_code=303)
@@ -891,18 +895,17 @@ def create_app(
         finally:
             conn.close()
 
+    @app.post("/webhooks/billing")
     @app.post("/webhooks/stripe")
-    async def stripe_webhook(request: Request):
+    async def billing_webhook(request: Request):
+        """Dispatched to the active provider (closed plugin or the open
+        Stripe reference). Whatever the provider concludes, all it can
+        change is an organizer's plan."""
         body = await request.body()
-        signature = request.headers.get("stripe-signature", "")
-        if not settings.stripe_webhook_secret or not billing.verify_stripe_signature(
-            settings.stripe_webhook_secret, signature, body
-        ):
-            return PlainTextResponse("bad signature", status_code=400)
         conn = get_conn()
         try:
-            billing.handle_stripe_event(conn, json.loads(body))
-            return PlainTextResponse("ok")
+            status, text = provider.handle_webhook(conn, dict(request.headers), body)
+            return PlainTextResponse(text, status_code=status)
         finally:
             conn.close()
 
@@ -944,15 +947,15 @@ def create_app(
                 return RedirectResponse("/org", status_code=303)
             form = await read_form(request)
             errors = []
-            reason = billing.can_create_event(settings, conn, org)
+            reason = billing.can_create_event(provider, conn, org)
             if reason:
                 errors.append(reason)
             if form.get("visibility") == "public":
-                reason = billing.can_request_listing(settings, org)
+                reason = billing.can_request_listing(provider, org)
                 if reason:
                     errors.append(reason)
             if form.get("custom_domain"):
-                reason = billing.can_use_custom_domain(settings, org)
+                reason = billing.can_use_custom_domain(provider, org)
                 if reason:
                     errors.append(reason)
             event_id = None
@@ -1007,11 +1010,11 @@ def create_app(
             form = await read_form(request)
             errors = []
             if form.get("visibility") == "public" and cohort["visibility"] != "public":
-                reason = billing.can_request_listing(settings, org)
+                reason = billing.can_request_listing(provider, org)
                 if reason:
                     errors.append(reason)
             if form.get("custom_domain") and form.get("custom_domain") != (cohort["custom_domain"] or ""):
-                reason = billing.can_use_custom_domain(settings, org)
+                reason = billing.can_use_custom_domain(provider, org)
                 if reason:
                     errors.append(reason)
             if not errors:
@@ -1084,8 +1087,8 @@ def create_app(
             return render(
                 "org_dashboard.html", request,
                 org=org, events=events, base_url=settings.base_url,
-                billing_on=billing.enforced(settings),
-                is_free=(org["plan"] == "free"),
+                billing_on=provider.enforced(),
+                is_free=(billing.plan_of(provider, org) == billing.PLANS["free"]),
                 api_token=token,
             )
         finally:
@@ -1162,9 +1165,9 @@ def create_app(
             form = await api_form(request)
             errors = []
             for check in (
-                billing.can_create_event(settings, conn, org),
-                billing.can_request_listing(settings, org) if form.get("visibility") == "public" else None,
-                billing.can_use_custom_domain(settings, org) if form.get("custom_domain") else None,
+                billing.can_create_event(provider, conn, org),
+                billing.can_request_listing(provider, org) if form.get("visibility") == "public" else None,
+                billing.can_use_custom_domain(provider, org) if form.get("custom_domain") else None,
             ):
                 if check:
                     errors.append(check)
@@ -1212,11 +1215,11 @@ def create_app(
             form = await api_form(request)
             errors = []
             if form.get("visibility") == "public" and cohort["visibility"] != "public":
-                check = billing.can_request_listing(settings, org)
+                check = billing.can_request_listing(provider, org)
                 if check:
                     errors.append(check)
             if form.get("custom_domain") and form.get("custom_domain") != (cohort["custom_domain"] or ""):
-                check = billing.can_use_custom_domain(settings, org)
+                check = billing.can_use_custom_domain(provider, org)
                 if check:
                     errors.append(check)
             if not errors:

@@ -1,4 +1,4 @@
-"""Plans and Stripe billing.
+"""Plans, entitlements, and the billing provider boundary.
 
 The monetization rule: charge the organizer, never the participant.
 Participant-side behaviour is identical on every plan — no participant
@@ -6,22 +6,35 @@ caps, because a "sorry, full" page is a signal and mail costs nothing.
 Plans gate organizer conveniences only:
 
     free: one event with an active round at a time; private events only
-    pro:  unlimited concurrent events; may request public listing
+    pro:  unlimited concurrent events; public listing; custom domain
 
-With PLI_BILLING=off (the default: dev, self-hosting, launch phase)
-nothing is enforced and everyone behaves as pro.
+THE OPEN-CORE BOUNDARY. This platform's trust model rests on the source
+being public, so the split is deliberate and narrow:
 
-Stripe is the recommended processor for a French SASU: EU entity
-support, SCA/PSD2 handled, hosted Checkout (card data never touches this
-server — PCI SAQ-A), tax handling via Stripe Tax, subscriptions via
-Billing. Integration is deliberately thin: one Checkout redirect out,
-one signed webhook in. No card data, no Stripe SDK, no client-side JS.
+- A billing *provider* (possibly closed-source, loaded from
+  PLI_BILLING_PLUGIN) answers exactly one question — "what plan is this
+  organizer on?" — plus the plumbing to change the answer (a checkout
+  URL out, a payment webhook in).
+- The open core decides what a plan *means*: every gate lives in this
+  file, in public code. A provider receives organizer rows and webhook
+  bytes; it has no access to participants, declarations, rounds, or
+  keys, and nothing it returns can widen what a plan may touch.
+
+With PLI_BILLING=off and no plugin (the default: dev, self-hosting,
+launch phase) nothing is enforced and everyone behaves as pro.
+
+The built-in Stripe provider is kept here, open, as the reference
+implementation and for self-hosters: EU entity support, SCA/PSD2
+handled, hosted Checkout (card data never touches this server —
+PCI SAQ-A), subscriptions via Billing. One redirect out, one signed
+webhook in. No card data, no SDK, no client-side JS.
 """
 
 from __future__ import annotations
 
 import hashlib
 import hmac
+import importlib
 import json
 import sqlite3
 import urllib.parse
@@ -37,19 +50,100 @@ PLANS = {
 STRIPE_API = "https://api.stripe.com/v1/checkout/sessions"
 
 
-def enforced(settings: Settings) -> bool:
-    return settings.billing != "off"
+class BillingProvider:
+    """The provider contract. Subclass in a plugin package and expose
+    `create_provider(settings) -> BillingProvider`."""
+
+    def enforced(self) -> bool:
+        return False
+
+    def plan_name(self, organizer: sqlite3.Row) -> str:
+        return "pro"
+
+    def checkout_url(self, organizer: sqlite3.Row, opener=None) -> str | None:
+        return None
+
+    def handle_webhook(self, conn: sqlite3.Connection, headers: dict, body: bytes) -> tuple[int, str]:
+        return 400, "billing is not enabled"
 
 
-def plan_of(settings: Settings, organizer: sqlite3.Row) -> dict:
-    if not enforced(settings):
+class NullBilling(BillingProvider):
+    """PLI_BILLING=off — everything free, nothing enforced."""
+
+
+class StripeBilling(BillingProvider):
+    """Open reference provider (see module docstring)."""
+
+    def __init__(self, settings: Settings):
+        self.settings = settings
+
+    def enforced(self) -> bool:
+        return True
+
+    def plan_name(self, organizer: sqlite3.Row) -> str:
+        return organizer["plan"] if organizer["plan"] in PLANS else "free"
+
+    def checkout_url(self, organizer: sqlite3.Row, opener=None) -> str | None:
+        settings = self.settings
+        if not settings.stripe_secret or not settings.stripe_price_id:
+            return None
+        payload = urllib.parse.urlencode({
+            "mode": "subscription",
+            "line_items[0][price]": settings.stripe_price_id,
+            "line_items[0][quantity]": "1",
+            "client_reference_id": str(organizer["id"]),
+            "customer_email": organizer["email"],
+            "success_url": f"{settings.base_url}/org/dashboard",
+            "cancel_url": f"{settings.base_url}/org/dashboard",
+        }).encode()
+        request = urllib.request.Request(
+            STRIPE_API,
+            data=payload,
+            headers={"Authorization": f"Bearer {settings.stripe_secret}"},
+            method="POST",
+        )
+        opener = opener or urllib.request.urlopen
+        with opener(request, timeout=30) as response:
+            session = json.loads(response.read().decode())
+        return session.get("url")
+
+    def handle_webhook(self, conn: sqlite3.Connection, headers: dict, body: bytes) -> tuple[int, str]:
+        signature = headers.get("stripe-signature", "")
+        if not self.settings.stripe_webhook_secret or not verify_stripe_signature(
+            self.settings.stripe_webhook_secret, signature, body
+        ):
+            return 400, "bad signature"
+        handle_stripe_event(conn, json.loads(body))
+        return 200, "ok"
+
+
+def load_provider(settings: Settings) -> BillingProvider:
+    """Resolve the active provider. A plugin (PLI_BILLING_PLUGIN, a
+    module exposing create_provider) wins; then the open Stripe
+    reference (PLI_BILLING=stripe); then off. A broken plugin fails
+    fast at startup rather than silently un-gating anything."""
+    if settings.billing_plugin:
+        module = importlib.import_module(settings.billing_plugin)
+        return module.create_provider(settings)
+    if settings.billing == "stripe":
+        return StripeBilling(settings)
+    return NullBilling()
+
+
+# ---- entitlement gates: open code, always -----------------------------------
+
+
+def plan_of(provider: BillingProvider, organizer: sqlite3.Row) -> dict:
+    if not provider.enforced():
         return PLANS["pro"]
-    return PLANS.get(organizer["plan"], PLANS["free"])
+    return PLANS.get(provider.plan_name(organizer), PLANS["free"])
 
 
-def can_create_event(settings: Settings, conn: sqlite3.Connection, organizer: sqlite3.Row) -> str | None:
+def can_create_event(
+    provider: BillingProvider, conn: sqlite3.Connection, organizer: sqlite3.Row
+) -> str | None:
     """None if allowed, else a human-readable reason."""
-    plan = plan_of(settings, organizer)
+    plan = plan_of(provider, organizer)
     limit = plan["concurrent_events"]
     if limit is None:
         return None
@@ -67,43 +161,20 @@ def can_create_event(settings: Settings, conn: sqlite3.Connection, organizer: sq
     return None
 
 
-def can_request_listing(settings: Settings, organizer: sqlite3.Row) -> str | None:
-    if plan_of(settings, organizer)["public_listing"]:
+def can_request_listing(provider: BillingProvider, organizer: sqlite3.Row) -> str | None:
+    if plan_of(provider, organizer)["public_listing"]:
         return None
     return "Public listing is part of the pro plan."
 
 
-def can_use_custom_domain(settings: Settings, organizer: sqlite3.Row) -> str | None:
+def can_use_custom_domain(provider: BillingProvider, organizer: sqlite3.Row) -> str | None:
     # Same gate as listing: white-label is a pro convenience.
-    if plan_of(settings, organizer)["public_listing"]:
+    if plan_of(provider, organizer)["public_listing"]:
         return None
     return "Custom domains are part of the pro plan."
 
 
-def checkout_url(settings: Settings, organizer: sqlite3.Row, opener=None) -> str | None:
-    """Create a Stripe Checkout session and return its URL. `opener` is
-    injectable for tests; production uses urllib over TLS."""
-    if not enforced(settings) or not settings.stripe_secret or not settings.stripe_price_id:
-        return None
-    payload = urllib.parse.urlencode({
-        "mode": "subscription",
-        "line_items[0][price]": settings.stripe_price_id,
-        "line_items[0][quantity]": "1",
-        "client_reference_id": str(organizer["id"]),
-        "customer_email": organizer["email"],
-        "success_url": f"{settings.base_url}/org/dashboard",
-        "cancel_url": f"{settings.base_url}/org/dashboard",
-    }).encode()
-    request = urllib.request.Request(
-        STRIPE_API,
-        data=payload,
-        headers={"Authorization": f"Bearer {settings.stripe_secret}"},
-        method="POST",
-    )
-    opener = opener or urllib.request.urlopen
-    with opener(request, timeout=30) as response:
-        session = json.loads(response.read().decode())
-    return session.get("url")
+# ---- Stripe primitives (open, unit-tested, reused by the reference provider) --
 
 
 def verify_stripe_signature(secret: str, header: str, body: bytes) -> bool:

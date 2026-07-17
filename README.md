@@ -177,12 +177,27 @@ python -m pli.cli ban-organizer --email <address>   # bans + suspends their even
   list** as keyed hashes and are never mailed again — no magic links, no
   match mail (the other half of a pair is still served). Manual entry:
   `python -m pli.cli suppress --email …`.
-- **Billing (Stripe)** — `PLI_BILLING=off` (default) leaves everything
-  free. `PLI_BILLING=stripe` enforces plans: free = one event at a time,
-  private only; pro = unlimited events + public listing. Participants
+- **Billing (open-core seam)** — `PLI_BILLING=off` (default) leaves
+  everything free. `PLI_BILLING=stripe` enforces plans through the open
+  Stripe reference provider: free = one event at a time, private only;
+  pro = unlimited events + public listing + custom domain. Participants
   are never gated or capped on any plan. Upgrade goes through hosted
-  Stripe Checkout (no card data here, PCI SAQ-A); plan changes arrive by
-  signed webhook at `/webhooks/stripe`.
+  Checkout (no card data here, PCI SAQ-A); plan changes arrive by signed
+  webhook at `/webhooks/billing` (alias `/webhooks/stripe`).
+
+  **The closed-source seam**: `PLI_BILLING_PLUGIN` loads a private
+  entitlements package (a module exposing
+  `create_provider(settings) -> pli.billing.BillingProvider`; skeleton in
+  `examples/pro_plugin_skeleton.py`). The boundary is deliberate and
+  narrow, and it is what keeps open-core compatible with the trust
+  model: the plugin decides **who has paid** — plan resolution, checkout
+  URL, payment webhook — while the open core decides **what that
+  means**. Every feature gate lives in public code (`pli/billing.py`),
+  the plugin never receives participants, declarations, rounds, or key
+  material, an unknown plan name resolves to `free`, and a broken plugin
+  fails at startup rather than silently un-gating anything. Nothing a
+  participant experiences depends on closed code — that claim is
+  test-pinned.
 - **Moderation** — public listing is a **greylist**: requesting it puts
   the event in a review queue (`pli.cli queue` / `approve` / `reject`);
   the directory shows approved events only, and pending events remain

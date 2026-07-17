@@ -41,10 +41,16 @@ def test_billing_off_means_everyone_is_pro(app, settings, mailer):
     from pli.organizers import get_or_create_organizer
 
     org = get_or_create_organizer(conn, "o@x.example")
-    assert billing.plan_of(settings, org) == billing.PLANS["pro"]
-    assert billing.can_create_event(settings, conn, org) is None
-    assert billing.can_request_listing(settings, org) is None
-    assert billing.checkout_url(settings, org) is None     # nothing to sell
+    provider = billing.load_provider(settings)           # billing=off → Null
+    assert isinstance(provider, billing.NullBilling)
+    assert not provider.enforced()
+    assert billing.plan_of(provider, org) == billing.PLANS["pro"]
+    assert billing.can_create_event(provider, conn, org) is None
+    assert billing.can_request_listing(provider, org) is None
+    assert billing.can_use_custom_domain(provider, org) is None
+    assert provider.checkout_url(org) is None            # nothing to sell
+    assert provider.handle_webhook(conn, {}, b"{}") == (400, "billing is not enabled")
+    assert provider.plan_name(org) == "pro"              # base-contract default
     conn.close()
 
 
@@ -129,6 +135,8 @@ def test_handle_stripe_event_edges(app):
 def test_checkout_url_calls_stripe(settings, mailer):
     s = dataclasses.replace(settings, billing="stripe", stripe_secret="sk_test",
                             stripe_price_id="price_1")
+    provider = billing.load_provider(s)
+    assert isinstance(provider, billing.StripeBilling)
     captured = {}
 
     class FakeResponse(io.BytesIO):
@@ -144,10 +152,13 @@ def test_checkout_url_calls_stripe(settings, mailer):
         return FakeResponse(b'{"url": "https://checkout.stripe.com/c/session"}')
 
     org = {"id": 7, "email": "o@x.example"}
-    url = billing.checkout_url(s, org, opener=opener)
+    url = provider.checkout_url(org, opener=opener)
     assert url == "https://checkout.stripe.com/c/session"
     assert captured["auth"] == "Bearer sk_test"
     assert "price_1" in captured["data"] and "client_reference_id=7" in captured["data"]
+
+    unconfigured = billing.StripeBilling(dataclasses.replace(s, stripe_secret=""))
+    assert unconfigured.checkout_url(org) is None
 
 
 def test_upgrade_route(settings, mailer):

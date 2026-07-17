@@ -28,8 +28,13 @@ class Settings:
     # the Stripe secret verifies the Stripe-Signature header.
     mail_webhook_token: str = ""
     # Billing: "off" (everything free — dev, self-host, launch phase) or
-    # "stripe" (plan enforcement on, checkout via Stripe).
+    # "stripe" (plan enforcement on, checkout via the open Stripe
+    # reference provider). billing_plugin, when set, is a Python module
+    # path exposing create_provider(settings) — the open-core seam where
+    # a private entitlements package may plug in. The plugin decides who
+    # has paid; the open core decides what that means.
     billing: str = "off"
+    billing_plugin: str = ""
     stripe_secret: str = ""
     stripe_price_id: str = ""
     stripe_webhook_secret: str = ""
@@ -69,6 +74,7 @@ class Settings:
             mail_from=os.environ.get("PLI_MAIL_FROM", "pli@localhost"),
             mail_webhook_token=os.environ.get("PLI_MAIL_WEBHOOK_TOKEN", ""),
             billing=os.environ.get("PLI_BILLING", "off"),
+            billing_plugin=os.environ.get("PLI_BILLING_PLUGIN", ""),
             stripe_secret=os.environ.get("PLI_STRIPE_SECRET", ""),
             stripe_price_id=os.environ.get("PLI_STRIPE_PRICE_ID", ""),
             stripe_webhook_secret=os.environ.get("PLI_STRIPE_WEBHOOK_SECRET", ""),

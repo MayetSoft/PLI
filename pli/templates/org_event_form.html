@@ -72,8 +72,21 @@ deleted, revealing nothing.</p></div>
 </form>
 
 {% if editing %}
-  {% if round %}
   <hr class="rule">
+  <h2>Embed widget</h2>
+  <p class="quiet">Paste this into the event's own website. Participants
+  type their address inside the frame — the host page cannot read it.
+  Options: <code>theme</code> = light | dark, <code>accent</code> = a
+  6-digit hex colour, <code>font</code> = serif | sans,
+  <code>lang</code> = en | fr | de | es | pt | sco.</p>
+  <label class="sr-only" for="embed-snippet">Embed code</label>
+  <textarea id="embed-snippet" readonly rows="4"
+            style="width:100%; font: .8rem ui-monospace, monospace"
+>&lt;iframe src="{{ base_url }}/e/{{ event_id }}/widget?theme=light&amp;accent=1f4a5f&amp;font=serif&amp;lang=en"
+        title="PLI — {{ form.get('label', '') }}" width="100%" height="380"
+        style="border:0" loading="lazy"&gt;&lt;/iframe&gt;</textarea>
+
+  {% if round %}
   <form method="post" action="/org/events/{{ event_id }}/cancel">
     <p class="quiet">Cancelling voids the current round: all declarations
     and signups are deleted, nothing is revealed, nobody is notified.</p>

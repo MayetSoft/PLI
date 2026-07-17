@@ -97,6 +97,29 @@ python -m pli.cli create-event --id devconf-2026 --label "DevConf 2026" \
   Matching is scoped to a single round, so two rounds can never leak into
   each other.
 
+## Embed widget
+
+Organizers can embed the join flow directly in their event's own website.
+The edit page provides the snippet:
+
+```html
+<iframe src="https://…/e/{event}/widget?theme=light&accent=1f4a5f&font=serif&lang=en"
+        title="PLI" width="100%" height="380" style="border:0" loading="lazy"></iframe>
+```
+
+- Stylistic options, strictly validated (anything else falls back to the
+  default): `theme` = `light`|`dark`, `accent` = 6-digit hex,
+  `font` = `serif`|`sans`, `lang` = any supported language.
+- It is an **iframe on purpose**: participants type their address inside
+  our origin, where the host page cannot read it — no script tag to
+  audit, no keystrokes leaving the frame.
+- Only `/e/{id}/widget` is framable (`frame-ancestors *`); every other
+  page keeps `frame-ancestors 'none'` + `X-Frame-Options: DENY`.
+- The widget shows the round's state (scheduled / open with the join
+  form / closed / concluded / voided / paused) and uses the same silent
+  join core as the site: the confirmation view is byte-identical
+  whatever was submitted.
+
 ## Abuse flags
 
 Every event page carries an anonymous "Report this event" link (reasons:

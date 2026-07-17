@@ -87,12 +87,21 @@ def create_app(
     @app.middleware("http")
     async def security_headers(request: Request, call_next):
         response = await call_next(request)
-        response.headers.setdefault(
-            "Content-Security-Policy",
-            "default-src 'self'; style-src 'self' 'unsafe-inline'; "
-            "img-src 'self' data:; form-action 'self'; frame-ancestors 'none'",
-        )
-        response.headers.setdefault("X-Frame-Options", "DENY")
+        if request.url.path.endswith("/widget"):
+            # The embed widget is the one surface meant to be framed by
+            # organizer sites. Everything else stays unframable.
+            response.headers.setdefault(
+                "Content-Security-Policy",
+                "default-src 'self'; style-src 'self' 'unsafe-inline'; "
+                "img-src 'self' data:; form-action 'self'; frame-ancestors *",
+            )
+        else:
+            response.headers.setdefault(
+                "Content-Security-Policy",
+                "default-src 'self'; style-src 'self' 'unsafe-inline'; "
+                "img-src 'self' data:; form-action 'self'; frame-ancestors 'none'",
+            )
+            response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("Referrer-Policy", "no-referrer")
         return response
@@ -162,6 +171,12 @@ def create_app(
     def join_response(request: Request, conn, cohort: sqlite3.Row | None, email: str, code: str):
         """Always the same page. Eligibility, join code, round state, rate
         limiting — none of it changes the response (I8)."""
+        process_join(request, conn, cohort, email, code)
+        return render("joined.html", request)
+
+    def process_join(request: Request, conn, cohort: sqlite3.Row | None, email: str, code: str):
+        """The silent core of /join, shared by the site form and the embed
+        widget. Never raises, never returns anything response-shaping."""
         try:
             if cohort is None or cohort["is_suspended"]:
                 raise _Silent()
@@ -206,7 +221,6 @@ def create_app(
             pass
         except Exception:
             pass  # never let an internal error differentiate the response
-        return render("joined.html", request)
 
     def session_participant(request: Request, conn, cookie_name: str, cohort_id: str):
         """(round_id, handle) if the cookie is valid, its round is open,
@@ -397,6 +411,74 @@ def create_app(
             if cohort is None or event_id == settings.cohort_id:
                 return render("not_found.html", request, status_code=404)
             return declare_post_response(request, conn, cohort, targets)
+        finally:
+            conn.close()
+
+    # ---- embed widget -------------------------------------------------------
+
+    WIDGET_THEMES = ("light", "dark")
+    WIDGET_FONTS = ("serif", "sans")
+    ACCENT_RE = re.compile(r"^[0-9a-fA-F]{6}$")
+
+    def widget_params(request: Request) -> dict:
+        """The organizer's stylistic choices, strictly validated — an
+        embed URL is attacker-controlled input, so anything that is not
+        exactly a known theme, a hex colour, or a known font falls back
+        to the default rather than reaching the page."""
+        theme = request.query_params.get("theme", "light")
+        accent = request.query_params.get("accent", "1f4a5f")
+        font = request.query_params.get("font", "serif")
+        return {
+            "theme": theme if theme in WIDGET_THEMES else "light",
+            "accent": accent.lower() if ACCENT_RE.match(accent) else "1f4a5f",
+            "font": font if font in WIDGET_FONTS else "serif",
+        }
+
+    def widget_response(request: Request, conn, cohort: sqlite3.Row, joined: bool):
+        style = widget_params(request)
+        lang = pick_lang(request)
+        latest = rounds.latest_round(conn, cohort["id"])
+        status = latest["status"] if latest else "none"
+        qs = f"?theme={style['theme']}&accent={style['accent']}&font={style['font']}&lang={lang}"
+        return render(
+            "widget.html", request,
+            **style,
+            base_path=f"/e/{cohort['id']}", qs=qs,
+            mode=mode_of(cohort),
+            label=cohort["label"],
+            suspended=bool(cohort["is_suspended"]),
+            join_code_required=bool(cohort["join_code_hash"]),
+            joined=joined,
+            round_status=status,
+            opens_fmt=fmt_paris(latest["opens_at"]) if latest else "",
+            closes_fmt=fmt_paris(latest["closes_at"]) if latest else "",
+            reveal_fmt=fmt_paris(latest["reveal_at"]) if latest else "",
+        )
+
+    @app.get("/e/{event_id}/widget", response_class=HTMLResponse)
+    def event_widget(request: Request, event_id: str):
+        conn = get_conn()
+        try:
+            cohort = resolve_event(conn, event_id)
+            if cohort is None or event_id == settings.cohort_id:
+                return render("not_found.html", request, status_code=404)
+            return widget_response(request, conn, cohort, joined=False)
+        finally:
+            conn.close()
+
+    @app.post("/e/{event_id}/widget", response_class=HTMLResponse)
+    def event_widget_join(request: Request, event_id: str,
+                          email: str = Form(""), code: str = Form("")):
+        """Same silent join core as the site form; the confirmation view
+        is identical whatever was submitted (I8 holds inside the frame
+        too)."""
+        conn = get_conn()
+        try:
+            cohort = resolve_event(conn, event_id)
+            if cohort is None or event_id == settings.cohort_id:
+                return render("not_found.html", request, status_code=404)
+            process_join(request, conn, cohort, email, code)
+            return widget_response(request, conn, cohort, joined=True)
         finally:
             conn.close()
 

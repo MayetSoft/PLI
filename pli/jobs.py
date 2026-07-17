@@ -56,7 +56,10 @@ def run_reveal(settings: Settings) -> int:
         ).fetchone()
         if row is None:
             return 0
-        return rounds.reveal_round(conn, KeyStore(settings.keys_dir), make_mailer(settings), row["id"])
+        return rounds.reveal_round(
+            conn, KeyStore(settings.keys_dir), make_mailer(settings), row["id"],
+            pepper=settings.pepper,
+        )
     finally:
         conn.close()
 
@@ -65,7 +68,9 @@ def run_tick(settings: Settings) -> dict[str, int]:
     conn = db.connect(settings.db_path)
     try:
         db.init_db(conn)
-        return rounds.tick(conn, KeyStore(settings.keys_dir), make_mailer(settings))
+        return rounds.tick(
+            conn, KeyStore(settings.keys_dir), make_mailer(settings), pepper=settings.pepper
+        )
     finally:
         conn.close()
 

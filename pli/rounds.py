@@ -20,7 +20,7 @@ import sqlite3
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from . import db
+from . import db, suppression
 from .crypto import KeyStore, unseal
 from .mailer import Mail, Mailer
 
@@ -186,6 +186,7 @@ def reveal_round(
     keystore: KeyStore,
     mailer: Mailer,
     round_id: int,
+    pepper: bytes | None = None,
 ) -> int:
     """Saturday 08:00. Returns the number of reciprocal pairs.
 
@@ -223,6 +224,8 @@ def reveal_round(
                 a, b = contacts[row["src"]], contacts[row["dst"]]
                 pairs += 1
                 for me, other in ((a, b), (b, a)):
+                    if pepper is not None and suppression.is_suppressed(conn, pepper, me):
+                        continue  # bounced/complained: we never mail them again
                     try:
                         mailer.send(Mail(to=me, subject=MATCH_SUBJECT,
                                          body=MATCH_BODY.format(other=other, note=note)))
@@ -258,6 +261,7 @@ def tick(
     keystore: KeyStore,
     mailer: Mailer,
     now: datetime | None = None,
+    pepper: bytes | None = None,
 ) -> dict[str, int]:
     """Advance every round that is due, on its own timeline. Run once a
     minute. Replaces fixed cron positions: the schedule lives in the
@@ -286,7 +290,7 @@ def tick(
 
     for row in conn.execute("SELECT * FROM rounds WHERE status = 'closed'").fetchall():
         if now >= _dt(row["reveal_at"]):
-            reveal_round(conn, keystore, mailer, row["id"])
+            reveal_round(conn, keystore, mailer, row["id"], pepper=pepper)
             stats["revealed"] += 1
 
     return stats

@@ -113,6 +113,40 @@ python -m pli.cli unsuspend --id <event>    # also clears its flags
 python -m pli.cli ban-organizer --email <address>   # bans + suspends their events
 ```
 
+## Deliverability, billing, legal, i18n
+
+- **Bounce/complaint webhooks** — point the mail provider at
+  `POST /webhooks/mail/{PLI_MAIL_WEBHOOK_TOKEN}` (Postmark payload shape
+  or generic `{"type","email"}`). Addresses land on a **suppression
+  list** as keyed hashes and are never mailed again — no magic links, no
+  match mail (the other half of a pair is still served). Manual entry:
+  `python -m pli.cli suppress --email …`.
+- **Billing (Stripe)** — `PLI_BILLING=off` (default) leaves everything
+  free. `PLI_BILLING=stripe` enforces plans: free = one event at a time,
+  private only; pro = unlimited events + public listing. Participants
+  are never gated or capped on any plan. Upgrade goes through hosted
+  Stripe Checkout (no card data here, PCI SAQ-A); plan changes arrive by
+  signed webhook at `/webhooks/stripe`.
+- **Moderation** — public listing is a **greylist**: requesting it puts
+  the event in a review queue (`pli.cli queue` / `approve` / `reject`);
+  the directory shows approved events only, and pending events remain
+  reachable by their link. The **blacklist** (`blacklist-add`, exact
+  address or whole domain) silently blocks organizer sign-in. Flags
+  auto-suspend at threshold as before.
+- **Legal** — `/legal/privacy`, `/legal/terms`, `/legal/dpa` in English
+  and French, rendered with the SASU's identity from `PLI_COMPANY_*`.
+  GDPR working papers (Art. 30 register, retention register, DPIA,
+  sub-processors) live in `docs/gdpr/`. **All of it is a serious draft,
+  not legal advice — have French counsel review before launch.**
+- **i18n** — participant pages ship in English, French, German, Spanish,
+  Portuguese, and Scots (`?lang=fr|de|es|pt|sco`, persisted in a cookie,
+  Accept-Language honoured). The catalogue is completeness-tested. The
+  non-French translations are machine-drafted: **have native speakers
+  review them**, especially every sentence carrying a safety promise.
+  Organizer console is English-only for now.
+- **Accessibility** — skip link, landmarks, labelled controls,
+  focus-visible outlines, WCAG AA contrast, `lang` attribute per page.
+
 ## The public face
 
 With no default community configured, `/` is a landing page explaining

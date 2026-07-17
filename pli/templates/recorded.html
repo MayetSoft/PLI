@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
 
-<p>Recorded. Nothing more will happen until {% if mode == 'weekly' %}Saturday{% else %}the reveal{% endif %}.</p>
+<p>{{ t('recorded', until=t('until_weekly') if mode == 'weekly' else t('until_event')) }}</p>
 
 {% endblock %}

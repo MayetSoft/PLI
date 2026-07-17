@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h2>Privacy policy</h2>
+<p class="quiet">Draft for legal review — not yet reviewed by counsel.
+French version: <a href="/legal/privacy?lang=fr">français</a>.</p>
+
+<p><strong>Controller / processor.</strong> The platform is operated by
+{{ company_name }}, {{ company_address }}, SIREN {{ company_siren }}
+("we"). For the default community we act as data controller. For events
+created by an organizer, the organizer is the data controller and we act
+as processor under the <a href="/legal/dpa">data processing agreement</a>.
+Contact: {{ company_contact }}.</p>
+
+<p><strong>What this service is.</strong> A mutual-declaration escrow.
+You privately name up to three people; if — and only if — a named person
+names you back, each of you receives the other's email address at the
+published reveal time. Nothing else is ever disclosed, to anyone.</p>
+
+<p><strong>Data we process, and for how long.</strong></p>
+<ol>
+  <li><em>Your email address</em>, if you join a round: stored as a keyed
+  hash (HMAC-SHA256) plus an encrypted blob (AES-256-GCM under a
+  per-round key). Deleted at the reveal, at the latest. Legal basis:
+  consent (Art. 6(1)(a) GDPR); the declaration content can reveal
+  information about your affective life, which we treat under Art. 9(2)(a)
+  — explicit consent given by the act of declaring, after this notice.</li>
+  <li><em>Your declarations</em>: stored only as pairs of keyed hashes.
+  Never shown to anyone — including you — and deleted at the reveal,
+  matched or not. The database is then compacted so deleted data is not
+  recoverable from the file.</li>
+  <li><em>Organizer accounts</em>: the organizer's email address, plan,
+  and configuration, kept for the life of the account. Legal basis:
+  contract (Art. 6(1)(b)).</li>
+  <li><em>Abuse reports</em>: reason, optional free text, and a keyed
+  hash of the reporter's IP (to deduplicate). No reporter identity is
+  stored. Legal basis: legitimate interest (Art. 6(1)(f), platform
+  safety).</li>
+  <li><em>Suppression list</em>: a keyed hash of addresses whose mail
+  bounced or who complained, kept so we never mail them again. Legal
+  basis: legitimate interest and Art. 21 objection handling.</li>
+</ol>
+
+<p><strong>What we never do.</strong> No profiles. No advertising. No
+sale or sharing of data. No analytics on participants. No request-level
+access logs. No backups of the participation database — deletion means
+deletion. Mail is sent through a transactional provider configured
+without message archiving.</p>
+
+<p><strong>The honest limit.</strong> While a round is live, the operator
+technically holds key material that could reconstruct who named whom.
+That window closes at the reveal, when the data is destroyed. We state
+this because it is true; do not participate if this trust is more than
+you wish to extend.</p>
+
+<p><strong>Your rights.</strong> Access, rectification, erasure,
+restriction, portability, objection (Arts. 15–21 GDPR): write to
+{{ company_contact }}. Note that after a reveal there is nothing left to
+access or erase, and during a round we cannot show you your own
+declarations (an anti-coercion property). You may lodge a complaint with
+the CNIL (cnil.fr).</p>
+
+<p><strong>Age.</strong> The service is not directed at children. You
+must be at least 15 (the French age of digital consent, Art. 45 of the
+Loi Informatique et Libertés) — organizers of a given event may set a
+higher bar.</p>
+
+{% endblock %}

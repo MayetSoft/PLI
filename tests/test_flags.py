@@ -103,17 +103,29 @@ def test_unsuspend_clears_flags(app, mailer):
     assert not suspended(app, "party")
 
 
-def test_suspended_and_private_events_never_listed(app, mailer):
+def test_directory_lists_only_approved_public_unsuspended(app, mailer):
+    """The directory is a moderated greylist: public + approved +
+    unsuspended, nothing else. Pending events stay reachable by link but
+    invisible."""
     create_event(app, event_id="listed", domains=(DOMAIN,))
     create_event(app, event_id="hidden", domains=(DOMAIN,))
+    create_event(app, event_id="pending", domains=(DOMAIN,))
     create_event(app, event_id="flagged", domains=(DOMAIN,))
     conn = connect(app)
-    conn.execute("UPDATE cohorts SET visibility = 'public' WHERE id IN ('listed', 'flagged')")
+    conn.execute(
+        "UPDATE cohorts SET visibility = 'public' WHERE id IN ('listed', 'pending', 'flagged')"
+    )
+    conn.execute(
+        "UPDATE cohorts SET listing_status = 'approved' WHERE id IN ('listed', 'flagged')"
+    )
+    conn.execute("UPDATE cohorts SET listing_status = 'pending' WHERE id = 'pending'")
     conn.commit()
     organizers.set_suspended(conn, "flagged", True)
     conn.close()
 
     page = TestClient(app).get("/events")
     assert "/e/listed" in page.text
-    assert "/e/hidden" not in page.text
-    assert "/e/flagged" not in page.text
+    assert "/e/hidden" not in page.text       # private
+    assert "/e/pending" not in page.text      # greylisted, not yet approved
+    assert "/e/flagged" not in page.text      # suspended
+    assert TestClient(app).get("/e/pending").status_code == 200   # link still works

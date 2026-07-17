@@ -64,6 +64,28 @@ def organizer_by_email(conn: sqlite3.Connection, email: str) -> sqlite3.Row | No
     return conn.execute("SELECT * FROM organizers WHERE email = ?", (email,)).fetchone()
 
 
+def is_blacklisted(conn: sqlite3.Connection, email: str) -> bool:
+    """Exact address or whole-domain match against the moderation
+    blacklist. Checked at organizer sign-in; matches are silent."""
+    domain = email.rpartition("@")[2]
+    return conn.execute(
+        "SELECT 1 FROM blacklist WHERE pattern IN (?, ?)", (email, domain)
+    ).fetchone() is not None
+
+
+def blacklist_add(conn: sqlite3.Connection, pattern: str) -> None:
+    with conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO blacklist (pattern, created_at) VALUES (?, ?)",
+            (pattern.strip().lower(), _utcnow().isoformat()),
+        )
+
+
+def blacklist_remove(conn: sqlite3.Connection, pattern: str) -> None:
+    with conn:
+        conn.execute("DELETE FROM blacklist WHERE pattern = ?", (pattern.strip().lower(),))
+
+
 def ban_organizer(conn: sqlite3.Connection, email: str) -> int:
     """Ban an organizer and suspend every event they run. Returns the
     number of events suspended."""
@@ -175,6 +197,13 @@ def create_event(
             visibility=clean["visibility"], description=clean["description"],
             mail_intro=clean["mail_intro"],
         )
+        if clean["visibility"] == "public":
+            # Greylist: asking to be public queues the event for review.
+            # It stays reachable by its link; it is listed only once approved.
+            with conn:
+                conn.execute(
+                    "UPDATE cohorts SET listing_status = 'pending' WHERE id = ?", (event_id,)
+                )
         rounds.schedule_round(
             conn, keystore, event_id, clean["opens"], clean["closes"], clean["reveal"]
         )
@@ -260,7 +289,17 @@ def update_event(
     if errors:
         return errors
 
+    # Listing moderation: going public (re)queues review unless already
+    # approved; going private always delists.
+    if clean["visibility"] == "public":
+        listing = cohort["listing_status"] if cohort["listing_status"] == "approved" else "pending"
+    else:
+        listing = "unlisted"
+
     with conn:
+        conn.execute(
+            "UPDATE cohorts SET listing_status = ? WHERE id = ?", (listing, cohort["id"])
+        )
         conn.execute(
             "UPDATE cohorts SET label = ?, description = ?, mail_intro = ?,"
             " visibility = ?, email_domains = ?, join_code_hash = ?, min_cohort = ?"

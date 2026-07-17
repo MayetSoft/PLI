@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h2>Terms of service</h2>
+<p class="quiet">Draft for legal review — not yet reviewed by counsel.
+Version française : <a href="/legal/terms?lang=fr">français</a>.</p>
+
+<p><strong>Operator.</strong> {{ company_name }}, {{ company_address }},
+SIREN {{ company_siren }}. Contact: {{ company_contact }}.</p>
+
+<p><strong>The service.</strong> A mutual-declaration escrow, run in
+rounds. Declarations are final for the round: they cannot be viewed,
+edited, or withdrawn once submitted, and they are destroyed at the
+reveal whether matched or not. If a round does not reach its published
+threshold it is voided and everything is deleted. These are product
+properties, not defects; by using the service you accept them.</p>
+
+<p><strong>For participants.</strong> You may only submit email
+addresses of people you actually know from the community or event
+context. Using the service to harass, monitor, or repeatedly target a
+person, or joining with an address that is not yours, is prohibited. A
+match message gives you a correspondent, not a claim on anyone: what
+happens after the reveal is between the two of you and subject to
+ordinary law.</p>
+
+<p><strong>For organizers.</strong> You are responsible for the lawful
+basis of your event, for its description being truthful (no impersonation
+of institutions or brands), and for setting parameters appropriate to
+your community, including any age requirement stricter than ours. You
+receive aggregate signup counts and round status only. Events may be
+suspended pending review upon abuse reports, and cancelled events reveal
+nothing. Fees, where applicable, are presented at purchase and are
+non-refundable once a round has revealed.</p>
+
+<p><strong>No warranty of outcome.</strong> A voided round, a failed mail
+delivery, or an empty reveal is a normal outcome. Our liability is
+limited to the amounts you paid us in the twelve months preceding the
+claim; nothing in these terms excludes liability that cannot be excluded
+under French law.</p>
+
+<p><strong>Governing law.</strong> French law; French courts have
+jurisdiction, without prejudice to mandatory consumer protections of
+your country of residence. EU consumers may also use the ODR platform
+(ec.europa.eu/consumers/odr).</p>
+
+{% endblock %}

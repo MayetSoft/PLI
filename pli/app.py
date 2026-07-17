@@ -24,10 +24,10 @@ from datetime import datetime
 from pathlib import Path
 
 from fastapi import FastAPI, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from . import auth, db, organizers, rounds
+from . import auth, billing, db, i18n, organizers, rounds, suppression
 from .config import Settings
 from .crypto import KeyStore, handle, seal
 from .mailer import Mail, Mailer, make_mailer
@@ -100,10 +100,24 @@ def create_app(
     def get_conn() -> sqlite3.Connection:
         return db.connect(settings.db_path)
 
+    def pick_lang(request: Request) -> str:
+        return i18n.pick_language(
+            request.query_params.get("lang"),
+            request.cookies.get("pli_lang"),
+            request.headers.get("accept-language", ""),
+        )
+
     def render(name: str, request: Request, status_code: int = 200, **context) -> HTMLResponse:
-        return templates.TemplateResponse(
+        lang = pick_lang(request)
+        context.setdefault("lang", lang)
+        context.setdefault("languages", i18n.LANGUAGES)
+        context.setdefault("t", lambda key, **kw: i18n.translate(lang, key, **kw))
+        response = templates.TemplateResponse(
             request=request, name=name, context=context, status_code=status_code
         )
+        if request.query_params.get("lang") == lang and request.cookies.get("pli_lang") != lang:
+            response.set_cookie("pli_lang", lang, max_age=31536000, samesite="lax")
+        return response
 
     def get_cohort(conn, cohort_id: str) -> sqlite3.Row | None:
         return conn.execute("SELECT * FROM cohorts WHERE id = ?", (cohort_id,)).fetchone()
@@ -165,6 +179,8 @@ def create_app(
                 presented = handle(settings.pepper, "code:" + code.strip())
                 if not hmac_mod.compare_digest(presented, bytes(code_hash)):
                     raise _Silent()
+            if suppression.is_suppressed(conn, settings.pepper, norm):
+                raise _Silent()  # bounced or complained: never mail again
             open_round = rounds.current_open_round(conn, cohort["id"])
             if open_round is None:
                 raise _Silent()
@@ -288,6 +304,7 @@ def create_app(
                 "       r.opens_at, r.closes_at"
                 " FROM cohorts c JOIN rounds r ON r.cohort_id = c.id"
                 " WHERE c.visibility = 'public' AND c.is_suspended = 0"
+                "   AND c.listing_status = 'approved'"
                 "   AND r.status IN ('scheduled', 'open')"
                 " ORDER BY r.opens_at",
             ).fetchall()
@@ -478,6 +495,10 @@ def create_app(
                 norm = normalise_email(email)
                 if not limiter.allow(f"orgaddr:{norm}", *JOIN_ADDR_LIMIT):
                     raise _Silent()
+                if organizers.is_blacklisted(conn, norm):
+                    raise _Silent()
+                if suppression.is_suppressed(conn, settings.pepper, norm):
+                    raise _Silent()
                 existing = organizers.organizer_by_email(conn, norm)
                 if existing is not None and existing["status"] != "active":
                     raise _Silent()
@@ -534,9 +555,86 @@ def create_app(
             return render(
                 "org_dashboard.html", request,
                 org=org, events=events, base_url=settings.base_url,
+                billing_on=billing.enforced(settings),
+                is_free=(org["plan"] == "free"),
             )
         finally:
             conn.close()
+
+    @app.post("/org/upgrade")
+    def org_upgrade(request: Request):
+        conn = get_conn()
+        try:
+            org = current_organizer(request, conn)
+            if org is None:
+                return RedirectResponse("/org", status_code=303)
+            try:
+                url = billing.checkout_url(settings, org)
+            except Exception:
+                url = None  # provider unreachable: land back on the dashboard
+            return RedirectResponse(url or "/org/dashboard", status_code=303)
+        finally:
+            conn.close()
+
+    # ---- inbound webhooks ---------------------------------------------------
+
+    @app.post("/webhooks/mail/{token}")
+    async def mail_webhook(request: Request, token: str):
+        """Bounce/complaint feed from the mail provider. Accepts Postmark's
+        shape ({"RecordType": "Bounce"|"SpamComplaint", "Email": ...}) and a
+        generic {"type", "email"}. The address goes onto the suppression
+        list as a keyed hash; the payload itself is not retained."""
+        if not settings.mail_webhook_token or not hmac_mod.compare_digest(
+            token, settings.mail_webhook_token
+        ):
+            return PlainTextResponse("not found", status_code=404)
+        conn = get_conn()
+        try:
+            try:
+                payload = json.loads(await request.body())
+            except Exception:
+                return PlainTextResponse("ignored")
+            kind = str(payload.get("RecordType") or payload.get("type") or "").lower()
+            email = str(
+                payload.get("Email") or payload.get("Recipient") or payload.get("email") or ""
+            )
+            if "bounce" in kind:
+                suppression.suppress(conn, settings.pepper, email, "bounce")
+            elif "complaint" in kind:
+                suppression.suppress(conn, settings.pepper, email, "complaint")
+            return PlainTextResponse("ok")
+        finally:
+            conn.close()
+
+    @app.post("/webhooks/stripe")
+    async def stripe_webhook(request: Request):
+        body = await request.body()
+        signature = request.headers.get("stripe-signature", "")
+        if not settings.stripe_webhook_secret or not billing.verify_stripe_signature(
+            settings.stripe_webhook_secret, signature, body
+        ):
+            return PlainTextResponse("bad signature", status_code=400)
+        conn = get_conn()
+        try:
+            billing.handle_stripe_event(conn, json.loads(body))
+            return PlainTextResponse("ok")
+        finally:
+            conn.close()
+
+    # ---- legal --------------------------------------------------------------
+
+    @app.get("/legal/{page}", response_class=HTMLResponse)
+    def legal(request: Request, page: str):
+        if page not in ("privacy", "terms", "dpa"):
+            return render("not_found.html", request, status_code=404)
+        suffix = "fr" if pick_lang(request) == "fr" else "en"
+        return render(
+            f"legal_{page}_{suffix}.html", request,
+            company_name=settings.company_name,
+            company_address=settings.company_address,
+            company_siren=settings.company_siren,
+            company_contact=settings.company_contact,
+        )
 
     @app.get("/org/events/new", response_class=HTMLResponse)
     def org_event_new(request: Request):
@@ -560,9 +658,19 @@ def create_app(
             if org is None:
                 return RedirectResponse("/org", status_code=303)
             form = await read_form(request)
-            event_id, errors = organizers.create_event(
-                conn, keystore, settings.pepper, org["id"], form
-            )
+            errors = []
+            reason = billing.can_create_event(settings, conn, org)
+            if reason:
+                errors.append(reason)
+            if form.get("visibility") == "public":
+                reason = billing.can_request_listing(settings, org)
+                if reason:
+                    errors.append(reason)
+            event_id = None
+            if not errors:
+                event_id, errors = organizers.create_event(
+                    conn, keystore, settings.pepper, org["id"], form
+                )
             if errors:
                 return render(
                     "org_event_form.html", request,
@@ -606,7 +714,13 @@ def create_app(
             if cohort is None:
                 return render("not_found.html", request, status_code=404)
             form = await read_form(request)
-            errors = organizers.update_event(conn, keystore, settings.pepper, cohort, form)
+            errors = []
+            if form.get("visibility") == "public" and cohort["visibility"] != "public":
+                reason = billing.can_request_listing(settings, org)
+                if reason:
+                    errors.append(reason)
+            if not errors:
+                errors = organizers.update_event(conn, keystore, settings.pepper, cohort, form)
             if errors:
                 round_row = organizers.active_round(conn, event_id)
                 return render(

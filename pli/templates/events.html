@@ -1,25 +1,24 @@
 {% extends "base.html" %}
 {% block content %}
 
-<h2>Public events</h2>
+<h2>{{ t('dir_title') }}</h2>
 
 {% if events %}
   {% for e in events %}
   <p>
     <a href="/e/{{ e.id }}">{{ e.label }}</a><br>
     {% if e.round_status == 'open' %}
-    <span class="quiet">Open now — closes {{ e.closes_fmt }}.</span>
+    <span class="quiet">{{ t('dir_open', closes=e.closes_fmt) }}</span>
     {% else %}
-    <span class="quiet">Opens {{ e.opens_fmt }}.</span>
+    <span class="quiet">{{ t('dir_opens', opens=e.opens_fmt) }}</span>
     {% endif %}
     {% if e.description %}<br><span class="quiet">{{ e.description }}</span>{% endif %}
   </p>
   {% endfor %}
 {% else %}
-  <p>No public events at the moment. Most events are private — you reach
-  them through the link their organizer circulates.</p>
+  <p>{{ t('dir_empty') }}</p>
 {% endif %}
 
-<p><a href="/about">What is this?</a></p>
+<p><a href="/about">{{ t('about_link') }}</a></p>
 
 {% endblock %}

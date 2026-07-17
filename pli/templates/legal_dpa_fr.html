@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h2>Accord de sous-traitance (organisateurs)</h2>
+<p class="quiet">Projet soumis à relecture juridique — pas encore validé
+par un conseil. English version: <a href="/legal/dpa?lang=en">English</a>.</p>
+
+<p>Le présent accord au titre de l'art. 28 RGPD s'applique entre
+l'organisateur d'événement (responsable de traitement) et
+{{ company_name }}, {{ company_address }}, SIREN {{ company_siren }}
+(sous-traitant), pour chaque événement que l'organisateur opère sur la
+plateforme. Il est accepté à la création de l'événement.</p>
+
+<ol>
+  <li><strong>Objet et durée.</strong> Opération d'une manche de
+  déclarations réciproques pour l'événement de l'organisateur, de la
+  création de la manche jusqu'à la révélation ou l'annulation, moment où
+  toutes les données de participation sont effacées par conception.</li>
+  <li><strong>Nature et finalité.</strong> Collecte des adresses e-mail
+  des participants (stockées en empreintes à clé et blocs chiffrés) et
+  des déclarations scellées ; calcul des paires réciproques ;
+  notification des seules paires réciproques.</li>
+  <li><strong>Catégories de personnes et de données.</strong>
+  Participants de l'événement ; adresses e-mail et graphe de
+  déclarations, ce dernier pouvant révéler des aspects de la vie
+  affective (art. 9 RGPD), traité avec le consentement explicite du
+  participant.</li>
+  <li><strong>Instructions.</strong> Le sous-traitant n'agit que sur les
+  instructions documentées que constituent les mécanismes publiés de la
+  plateforme. L'organisateur reconnaît que ces mécanismes interdisent
+  certaines instructions : le sous-traitant ne divulguera à
+  l'organisateur ni listes de participants, ni déclarations, ni données
+  de correspondance, la non-divulgation étant le service lui-même.</li>
+  <li><strong>Confidentialité et sécurité.</strong> Empreintes à clé et
+  chiffrement authentifié au repos, clés de manche détruites à la
+  révélation, pas de journaux au niveau des requêtes, pas de sauvegarde
+  des données de participation, effacement avec compactage du stockage à
+  la révélation. Les personnes habilitées sont tenues à la
+  confidentialité.</li>
+  <li><strong>Sous-traitants ultérieurs.</strong> Hébergement et e-mail
+  transactionnel (liste publiée dans la documentation RGPD du dépôt).
+  L'organisateur est informé à l'avance des changements et peut s'y
+  opposer en annulant l'événement, ce qui supprime tout.</li>
+  <li><strong>Droits des personnes.</strong> Par conception, la plupart
+  des demandes sont satisfaites par l'effacement à la révélation ; le
+  sous-traitant assiste l'organisateur pour toute demande reçue pendant
+  une manche en cours.</li>
+  <li><strong>Violation de données.</strong> Le sous-traitant notifie
+  l'organisateur dans les meilleurs délais après avoir eu connaissance
+  d'une violation affectant l'événement.</li>
+  <li><strong>Effacement.</strong> Automatique et inconditionnel à la
+  révélation ou à l'annulation ; aucune copie ne survit. L'audit de
+  cette propriété est offert à l'organisateur sous la forme du code
+  source public et de sa suite de tests.</li>
+</ol>
+
+{% endblock %}

@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h2>Politique de confidentialité</h2>
+<p class="quiet">Projet soumis à relecture juridique — pas encore validé
+par un conseil. English version: <a href="/legal/privacy?lang=en">English</a>.</p>
+
+<p><strong>Responsable / sous-traitant.</strong> La plateforme est
+exploitée par {{ company_name }}, {{ company_address }}, SIREN
+{{ company_siren }} (« nous »). Pour la communauté par défaut, nous
+agissons en responsable de traitement. Pour les événements créés par un
+organisateur, l'organisateur est responsable de traitement et nous
+agissons en sous-traitant selon l'<a href="/legal/dpa">accord de
+sous-traitance</a>. Contact : {{ company_contact }}.</p>
+
+<p><strong>Ce qu'est le service.</strong> Un séquestre de déclarations
+réciproques. Vous nommez en privé jusqu'à trois personnes ; si — et
+seulement si — une personne nommée vous nomme aussi, chacun reçoit
+l'adresse e-mail de l'autre à l'heure de révélation annoncée. Rien
+d'autre n'est jamais divulgué, à personne.</p>
+
+<p><strong>Données traitées et durées.</strong></p>
+<ol>
+  <li><em>Votre adresse e-mail</em>, si vous participez : stockée sous
+  forme d'empreinte à clé (HMAC-SHA256) et de bloc chiffré (AES-256-GCM,
+  clé propre à la manche). Supprimée au plus tard à la révélation. Base
+  légale : consentement (art. 6.1.a RGPD) ; le contenu des déclarations
+  peut révéler des informations sur la vie affective, traitées au titre
+  de l'art. 9.2.a — consentement explicite exprimé par l'acte de
+  déclaration, après lecture de la présente notice.</li>
+  <li><em>Vos déclarations</em> : stockées uniquement comme paires
+  d'empreintes à clé. Jamais montrées à quiconque — y compris vous — et
+  supprimées à la révélation, réciproques ou non. La base est ensuite
+  compactée afin que les données supprimées ne soient pas récupérables
+  dans le fichier.</li>
+  <li><em>Comptes organisateurs</em> : adresse e-mail, offre et
+  configuration, conservées pendant la vie du compte. Base légale :
+  contrat (art. 6.1.b).</li>
+  <li><em>Signalements</em> : motif, texte libre facultatif et empreinte
+  à clé de l'adresse IP du déclarant (dédoublonnage). Aucune identité de
+  déclarant n'est conservée. Base légale : intérêt légitime (art. 6.1.f,
+  sécurité de la plateforme).</li>
+  <li><em>Liste de suppression</em> : empreinte à clé des adresses en
+  erreur ou ayant signalé un abus d'envoi, conservée pour ne plus jamais
+  leur écrire. Base légale : intérêt légitime et art. 21.</li>
+</ol>
+
+<p><strong>Ce que nous ne faisons jamais.</strong> Pas de profils. Pas de
+publicité. Ni vente ni partage de données. Pas d'analyse des
+participants. Pas de journaux d'accès au niveau des requêtes. Pas de
+sauvegarde de la base de participation — supprimer veut dire supprimer.
+Les e-mails partent par un prestataire transactionnel configuré sans
+archivage des messages.</p>
+
+<p><strong>La limite, dite honnêtement.</strong> Pendant une manche en
+cours, l'opérateur détient techniquement des clés qui permettraient de
+reconstituer qui a nommé qui. Cette fenêtre se referme à la révélation,
+quand les données sont détruites. Nous le disons parce que c'est vrai ;
+ne participez pas si cette confiance dépasse celle que vous souhaitez
+accorder.</p>
+
+<p><strong>Vos droits.</strong> Accès, rectification, effacement,
+limitation, portabilité, opposition (art. 15 à 21 RGPD) :
+{{ company_contact }}. Après une révélation, il ne reste rien à consulter
+ni à effacer ; pendant une manche, nous ne pouvons pas vous montrer vos
+propres déclarations (propriété anti-coercition). Vous pouvez saisir la
+CNIL (cnil.fr).</p>
+
+<p><strong>Âge.</strong> Le service ne s'adresse pas aux enfants. Il faut
+avoir au moins 15 ans (majorité numérique française, art. 45 de la loi
+Informatique et Libertés) ; l'organisateur d'un événement peut exiger
+davantage.</p>
+
+{% endblock %}

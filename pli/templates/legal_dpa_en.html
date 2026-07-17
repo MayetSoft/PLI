@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h2>Data processing agreement (organizers)</h2>
+<p class="quiet">Draft for legal review — not yet reviewed by counsel.
+Version française : <a href="/legal/dpa?lang=fr">français</a>.</p>
+
+<p>This agreement under Art. 28 GDPR applies between the event organizer
+(controller) and {{ company_name }}, {{ company_address }}, SIREN
+{{ company_siren }} (processor) for every event the organizer runs on
+the platform. It is accepted at event creation.</p>
+
+<ol>
+  <li><strong>Subject and duration.</strong> Operation of a
+  mutual-declaration round for the organizer's event, from round creation
+  until reveal or void, at which point all participant data is erased by
+  design.</li>
+  <li><strong>Nature and purpose.</strong> Collection of participant
+  email addresses (stored as keyed hashes and encrypted blobs) and
+  sealed declarations; computation of reciprocal pairs; notification of
+  reciprocal pairs only.</li>
+  <li><strong>Categories of data subjects and data.</strong> Event
+  participants; email addresses and declaration graphs, the latter being
+  data liable to reveal aspects of affective life (Art. 9 GDPR),
+  processed with the participant's explicit consent.</li>
+  <li><strong>Instructions.</strong> The processor acts only on the
+  documented instructions embodied in the platform's published
+  mechanics. The organizer acknowledges that the mechanics themselves
+  forbid certain instructions: the processor will not disclose rosters,
+  declarations, or match data to the organizer, because non-disclosure
+  is the service.</li>
+  <li><strong>Confidentiality & security.</strong> Keyed hashing and
+  authenticated encryption at rest, per-round keys destroyed at reveal,
+  no request-level logs, no backups of participation data, deletion with
+  storage compaction at reveal. Personnel authorised to operate the
+  platform are bound to confidentiality.</li>
+  <li><strong>Sub-processors.</strong> Hosting and transactional email
+  (list published in the repository's GDPR documentation). The organizer
+  is informed of changes in advance and may object by cancelling the
+  event, which deletes everything.</li>
+  <li><strong>Data subject rights.</strong> Given the design, most
+  requests are satisfied by the reveal-time erasure itself; the processor
+  assists the organizer with any request received during a live round.</li>
+  <li><strong>Breach notification.</strong> The processor notifies the
+  organizer without undue delay after becoming aware of a personal data
+  breach affecting the event.</li>
+  <li><strong>Erasure.</strong> Automatic and unconditional at reveal or
+  void; no copies survive. An audit of this property is available to the
+  organizer in the form of the public source code and its test suite.</li>
+</ol>
+
+{% endblock %}

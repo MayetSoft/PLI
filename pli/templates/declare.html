@@ -1,32 +1,29 @@
 {% extends "base.html" %}
 {% block content %}
 
+{% set when = t('when_weekly') if mode == 'weekly' else t('when_event') %}
+{% set until = t('until_weekly') if mode == 'weekly' else t('until_event') %}
+
 {% if remaining > 0 %}
-  <p>You may name up to three people this round.
-     You have {{ remaining }} remaining.</p>
+  <p>{{ t('remaining', remaining=remaining) }}</p>
 
   <div class="warn">
-    <p>This is a one-way door. Once submitted, a name cannot be viewed,
-    changed, or withdrawn — not even by you. If the feeling is mutual, you
-    both hear about it {% if mode == 'weekly' %}Saturday morning{% else %}at
-    the reveal{% endif %}. If it isn't, no one ever knows, including them.</p>
+    <p>{{ t('oneway', when=when) }}</p>
   </div>
 
   <form method="post" action="{{ base_path }}/declare">
-    {% for _ in range(remaining) %}
-    <input type="email" name="targets"
-           placeholder="their email address"
+    {% for i in range(remaining) %}
+    <label class="sr-only" for="target-{{ i }}">{{ t('lbl_target') }} {{ i + 1 }}</label>
+    <input type="email" id="target-{{ i }}" name="targets"
+           placeholder="{{ t('ph_target') }}"
            autocomplete="off" autocapitalize="none" spellcheck="false">
     {% endfor %}
-    <button type="submit">Seal</button>
+    <button type="submit">{{ t('btn_seal') }}</button>
   </form>
 
-  <p class="quiet">Leave fields empty to keep declarations for later in the
-  week. The person you name does not need to have signed up — and whether
-  they have is not something this page will ever tell you.</p>
+  <p class="quiet">{{ t('declare_note') }}</p>
 {% else %}
-  <p>Your three declarations are sealed. Nothing more will happen until
-  {% if mode == 'weekly' %}Saturday{% else %}the reveal{% endif %}.</p>
+  <p>{{ t('sealed', until=until) }}</p>
 {% endif %}
 
 {% endblock %}

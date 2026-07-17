@@ -24,6 +24,21 @@ class Settings:
     smtp_user: str = ""
     smtp_password: str = ""
     mail_from: str = "pli@localhost"
+    # Inbound webhooks. The mail token is a shared secret in the URL path;
+    # the Stripe secret verifies the Stripe-Signature header.
+    mail_webhook_token: str = ""
+    # Billing: "off" (everything free — dev, self-host, launch phase) or
+    # "stripe" (plan enforcement on, checkout via Stripe).
+    billing: str = "off"
+    stripe_secret: str = ""
+    stripe_price_id: str = ""
+    stripe_webhook_secret: str = ""
+    # Legal identity of the operator (a French SASU), rendered into the
+    # privacy policy, terms, and DPA pages. Placeholders until set.
+    company_name: str = "[COMPANY NAME] SASU"
+    company_address: str = "[REGISTERED ADDRESS]"
+    company_siren: str = "[SIREN]"
+    company_contact: str = "[CONTACT EMAIL]"
     extra: dict = field(default_factory=dict)
 
     @classmethod
@@ -47,4 +62,13 @@ class Settings:
             smtp_user=os.environ.get("PLI_SMTP_USER", ""),
             smtp_password=os.environ.get("PLI_SMTP_PASSWORD", ""),
             mail_from=os.environ.get("PLI_MAIL_FROM", "pli@localhost"),
+            mail_webhook_token=os.environ.get("PLI_MAIL_WEBHOOK_TOKEN", ""),
+            billing=os.environ.get("PLI_BILLING", "off"),
+            stripe_secret=os.environ.get("PLI_STRIPE_SECRET", ""),
+            stripe_price_id=os.environ.get("PLI_STRIPE_PRICE_ID", ""),
+            stripe_webhook_secret=os.environ.get("PLI_STRIPE_WEBHOOK_SECRET", ""),
+            company_name=os.environ.get("PLI_COMPANY_NAME", "[COMPANY NAME] SASU"),
+            company_address=os.environ.get("PLI_COMPANY_ADDRESS", "[REGISTERED ADDRESS]"),
+            company_siren=os.environ.get("PLI_COMPANY_SIREN", "[SIREN]"),
+            company_contact=os.environ.get("PLI_COMPANY_CONTACT", "[CONTACT EMAIL]"),
         )

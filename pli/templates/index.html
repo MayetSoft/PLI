@@ -7,91 +7,64 @@
 {% endif %}
 
 {% if suspended %}
-  <p>This event is paused pending review.</p>
+  <p>{{ t('paused') }}</p>
 {% elif round_status == 'open' %}
   {% if mode == 'weekly' %}
-  <p>A round is open. It closes Friday at 23:59, Paris time.</p>
+  <p>{{ t('open_weekly') }}</p>
   {% else %}
-  <p>The round is open. It closes {{ closes_fmt }}.
-     Reveal is {{ reveal_fmt }}.</p>
+  <p>{{ t('open_event', closes=closes_fmt, reveal=reveal_fmt) }}</p>
   {% endif %}
 
   <form method="post" action="{{ base_path }}/join">
-    <input type="email" name="email" required
-           placeholder="{% if mode == 'weekly' %}your institutional address{% else %}your email address{% endif %}"
+    <label class="sr-only" for="join-email">{{ t('lbl_email') }}</label>
+    <input type="email" id="join-email" name="email" required
+           placeholder="{{ t('ph_email_weekly') if mode == 'weekly' else t('ph_email') }}"
            autocomplete="off" autocapitalize="none" spellcheck="false">
     {% if join_code_required %}
-    <input type="text" name="code" required
-           placeholder="event code"
+    <label class="sr-only" for="join-code">{{ t('lbl_code') }}</label>
+    <input type="text" id="join-code" name="code" required
+           placeholder="{{ t('ph_code') }}"
            autocomplete="off" autocapitalize="none" spellcheck="false">
     {% endif %}
-    <button type="submit">Send me a sign-in link</button>
+    <button type="submit">{{ t('btn_link') }}</button>
   </form>
 {% elif round_status == 'scheduled' %}
-  <p>The round opens {{ opens_fmt }} and closes {{ closes_fmt }}.
-     Reveal is {{ reveal_fmt }}.</p>
+  <p>{{ t('scheduled', opens=opens_fmt, closes=closes_fmt, reveal=reveal_fmt) }}</p>
 {% elif round_status == 'closed' %}
-  {% if mode == 'weekly' %}
-  <p>This week's round is closed. Reveal is Saturday at 08:00, Paris time.</p>
-  {% else %}
-  <p>The round is closed. Reveal is {{ reveal_fmt }}.</p>
-  {% endif %}
+  <p>{{ t('closed_weekly') if mode == 'weekly' else t('closed_event', reveal=reveal_fmt) }}</p>
 {% elif round_status == 'voided' %}
-  {% if mode == 'weekly' %}
-  <p>No round this week.</p>
-  {% else %}
-  <p>This round did not reach its threshold. Nothing ran, and everything
-  was deleted.</p>
-  {% endif %}
+  <p>{{ t('voided_weekly') if mode == 'weekly' else t('voided_event') }}</p>
 {% elif round_status == 'revealed' and mode == 'event' %}
-  <p>This round has concluded. Everything has been deleted.</p>
+  <p>{{ t('concluded') }}</p>
 {% else %}
-  {% if mode == 'weekly' %}
-  <p>No round this week. The next one opens Monday at 00:00, Paris time.</p>
-  {% else %}
-  <p>No round is scheduled here yet.</p>
-  {% endif %}
+  <p>{{ t('none_weekly') if mode == 'weekly' else t('none_event') }}</p>
 {% endif %}
 
 <hr class="rule">
 
-<h2>How it works</h2>
+<h2>{{ t('how_title') }}</h2>
 <ol>
-  {% if mode == 'weekly' %}
-  <li>A round opens Monday and closes Friday night.</li>
-  {% else %}
-  <li>The round opens and closes at the times above.</li>
-  {% endif %}
-  <li>During the round, you may name up to three people by email address.
-      The three are final — no edits, no withdrawals, no viewing your list.</li>
-  <li>The people you name are never told. Not now, not later, not ever.</li>
-  {% if mode == 'weekly' %}
-  <li>Saturday morning, if two people named each other, each receives the
-      other's address by email. One message. That is all.</li>
-  {% else %}
-  <li>At reveal time, if two people named each other, each receives the
-      other's address by email. One message. That is all.</li>
-  {% endif %}
-  <li>Everything else is deleted, unread and unmatched. Silence.</li>
+  <li>{{ t('how1_weekly') if mode == 'weekly' else t('how1_event') }}</li>
+  <li>{{ t('how2') }}</li>
+  <li>{{ t('how3') }}</li>
+  <li>{{ t('how4_weekly') if mode == 'weekly' else t('how4_event') }}</li>
+  <li>{{ t('how5') }}</li>
 </ol>
 
-<p>If fewer than {{ min_cohort }} people sign up, the round is voided and
-everything is deleted. Nothing is revealed to anyone.</p>
+<p>{{ t('threshold', n=min_cohort) }}</p>
 
-<h2>The trust you are extending</h2>
-<p>Addresses are stored as keyed hashes and encrypted blobs, so a copy of
-the database alone reveals nothing. But the operator holds the key material
-and could, technically, reconstruct who named whom. The operator is one
-person. The graph is destroyed at reveal. The source code is public.
-That is the trust you are extending. If that is not enough — and that is a
-legitimate position — do not play.</p>
+<h2>{{ t('trust_title') }}</h2>
+<p>{{ t('trust_body') }}</p>
 
-<p class="quiet">No profiles. No photos. No chat. No browsing. No scores.
-If you both said it, you both find out. Otherwise, nothing happened.</p>
+<p class="quiet">{{ t('tagline') }}</p>
 
 {% if mode == 'event' %}
-<p class="quiet"><a href="{{ base_path }}/report">Report this event</a>
-· <a href="/about">What is PLI?</a></p>
+<p class="quiet"><a href="{{ base_path }}/report">{{ t('report_link') }}</a>
+· <a href="/about">{{ t('about_link') }}</a></p>
 {% endif %}
+
+<nav class="quiet" aria-label="Language">
+  {% for code in languages %}<a href="?lang={{ code }}" {% if code == lang %}aria-current="true"{% endif %}>{{ code }}</a>{% if not loop.last %} · {% endif %}{% endfor %}
+</nav>
 
 {% endblock %}

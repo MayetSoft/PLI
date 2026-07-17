@@ -1,9 +1,8 @@
 {% extends "base.html" %}
 {% block content %}
 
-<p>That link is no longer valid. Links work once and expire after
-30 minutes.</p>
+<p>{{ t('invalid') }}</p>
 
-<p><a href="/">Request a new one.</a></p>
+<p><a href="/">{{ t('request_new') }}</a></p>
 
 {% endblock %}

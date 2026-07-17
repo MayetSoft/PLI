@@ -84,6 +84,21 @@ CREATE TABLE IF NOT EXISTS flags (
   created_at    TEXT NOT NULL,
   PRIMARY KEY (cohort_id, reporter)
 ) WITHOUT ROWID;
+
+-- Mail suppression list, fed by bounce/complaint webhooks. Only a keyed
+-- hash is kept: membership is all we ever need to know.
+CREATE TABLE IF NOT EXISTS suppressions (
+  addr_hash     BLOB PRIMARY KEY,       -- HMAC(pepper, "suppress:" + normalised_email)
+  reason        TEXT NOT NULL,          -- bounce | complaint | manual
+  created_at    TEXT NOT NULL
+) WITHOUT ROWID;
+
+-- Moderation blacklist for organizers: exact emails or whole domains.
+-- Matching addresses cannot sign in as organizers; matches are silent.
+CREATE TABLE IF NOT EXISTS blacklist (
+  pattern       TEXT PRIMARY KEY,       -- "user@host.example" or "host.example"
+  created_at    TEXT NOT NULL
+) WITHOUT ROWID;
 """
 
 
@@ -107,6 +122,11 @@ def init_db(conn: sqlite3.Connection) -> None:
         "ALTER TABLE cohorts ADD COLUMN description TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE cohorts ADD COLUMN mail_intro TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE cohorts ADD COLUMN is_suspended INTEGER NOT NULL DEFAULT 0",
+        # unlisted | pending | approved — public listing is moderated
+        # (greylist): asking to be public queues the event for review.
+        "ALTER TABLE cohorts ADD COLUMN listing_status TEXT NOT NULL DEFAULT 'unlisted'",
+        "ALTER TABLE organizers ADD COLUMN plan TEXT NOT NULL DEFAULT 'free'",
+        "ALTER TABLE organizers ADD COLUMN stripe_customer TEXT",
     ):
         try:
             conn.execute(ddl)

@@ -21,7 +21,7 @@ import argparse
 import re
 from datetime import datetime
 
-from . import db, organizers, rounds
+from . import db, organizers, rounds, suppression
 from .config import Settings
 from .crypto import KeyStore, handle
 
@@ -46,6 +46,17 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("--id", required=True, help="event/cohort id")
     ban = sub.add_parser("ban-organizer", help="ban an organizer and suspend their events")
     ban.add_argument("--email", required=True)
+
+    sub.add_parser("queue", help="events waiting for public-listing review (greylist)")
+    for name in ("approve", "reject"):
+        p = sub.add_parser(name, help=f"{name} a pending public listing")
+        p.add_argument("--id", required=True, help="event/cohort id")
+    for name in ("blacklist-add", "blacklist-remove"):
+        p = sub.add_parser(name)
+        p.add_argument("--pattern", required=True, help="email address or bare domain")
+    sub.add_parser("blacklist", help="show the blacklist")
+    supp = sub.add_parser("suppress", help="manually suppress an address from all mail")
+    supp.add_argument("--email", required=True)
 
     cohort = sub.add_parser("create-cohort", help="weekly community (default product)")
     cohort.add_argument("--id", required=True)
@@ -106,6 +117,34 @@ def main(argv: list[str] | None = None) -> int:
         elif args.cmd == "ban-organizer":
             n = organizers.ban_organizer(conn, args.email.strip().lower())
             print(f"banned; {n} event(s) suspended")
+        elif args.cmd == "queue":
+            rows = conn.execute(
+                "SELECT id, label FROM cohorts WHERE listing_status = 'pending' ORDER BY id"
+            ).fetchall()
+            for row in rows:
+                print(f"{row['id']}  {row['label']}")
+            print(f"{len(rows)} pending")
+        elif args.cmd in ("approve", "reject"):
+            status = "approved" if args.cmd == "approve" else "unlisted"
+            with conn:
+                conn.execute(
+                    "UPDATE cohorts SET listing_status = ? WHERE id = ?", (status, args.id)
+                )
+            print(f"{args.id}: listing {status}")
+        elif args.cmd == "blacklist-add":
+            organizers.blacklist_add(conn, args.pattern)
+            print(f"blacklisted {args.pattern}")
+        elif args.cmd == "blacklist-remove":
+            organizers.blacklist_remove(conn, args.pattern)
+            print(f"removed {args.pattern}")
+        elif args.cmd == "blacklist":
+            rows = conn.execute("SELECT pattern FROM blacklist ORDER BY pattern").fetchall()
+            for row in rows:
+                print(row["pattern"])
+            print(f"{len(rows)} entr(y/ies)")
+        elif args.cmd == "suppress":
+            ok = suppression.suppress(conn, settings.pepper, args.email, "manual")
+            print("suppressed" if ok else "not an email-shaped address")
         else:
             print("db ready")
     finally:

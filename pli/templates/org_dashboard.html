@@ -3,11 +3,21 @@
 
 <h2>Your events</h2>
 
+{% if billing_on and is_free %}
+<p class="quiet">You are on the free plan: one event at a time, private only.
+<form method="post" action="/org/upgrade" style="display:inline">
+  <button type="submit">Upgrade</button>
+</form></p>
+{% endif %}
+
 {% if events %}
   {% for e in events %}
   <p>
     <strong>{{ e.cohort.label }}</strong>
     {% if e.cohort.is_suspended %}<span class="quiet"> — paused pending review</span>{% endif %}
+    {% if e.cohort.visibility == 'public' %}
+      <span class="quiet"> — listing: {{ e.cohort.listing_status }}</span>
+    {% endif %}
     <br>
     <span class="quiet">Share link: {{ base_url }}/e/{{ e.cohort.id }}</span><br>
     {% if e.round %}

@@ -58,6 +58,12 @@ def main(argv: list[str] | None = None) -> int:
     supp = sub.add_parser("suppress", help="manually suppress an address from all mail")
     supp.add_argument("--email", required=True)
 
+    oidc = sub.add_parser("set-oidc", help="configure institutional SSO for a cohort (operator only)")
+    oidc.add_argument("--id", required=True, help="event/cohort id")
+    oidc.add_argument("--issuer", required=True, help="OIDC issuer URL, or '' to disable")
+    oidc.add_argument("--client-id", default="")
+    oidc.add_argument("--client-secret", default="")
+
     cohort = sub.add_parser("create-cohort", help="weekly community (default product)")
     cohort.add_argument("--id", required=True)
     cohort.add_argument("--label", required=True)
@@ -145,6 +151,15 @@ def main(argv: list[str] | None = None) -> int:
         elif args.cmd == "suppress":
             ok = suppression.suppress(conn, settings.pepper, args.email, "manual")
             print("suppressed" if ok else "not an email-shaped address")
+        elif args.cmd == "set-oidc":
+            with conn:
+                conn.execute(
+                    "UPDATE cohorts SET oidc_issuer = ?, oidc_client_id = ?,"
+                    " oidc_client_secret = ? WHERE id = ?",
+                    (args.issuer or None, args.client_id or None,
+                     args.client_secret or None, args.id),
+                )
+            print(f"{args.id}: SSO {'enabled' if args.issuer else 'disabled'}")
         else:
             print("db ready")
     finally:

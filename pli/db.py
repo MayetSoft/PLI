@@ -127,6 +127,17 @@ def init_db(conn: sqlite3.Connection) -> None:
         "ALTER TABLE cohorts ADD COLUMN listing_status TEXT NOT NULL DEFAULT 'unlisted'",
         "ALTER TABLE organizers ADD COLUMN plan TEXT NOT NULL DEFAULT 'free'",
         "ALTER TABLE organizers ADD COLUMN stripe_customer TEXT",
+        # White-label host served by the platform (pro feature).
+        "ALTER TABLE cohorts ADD COLUMN custom_domain TEXT",
+        # Outbound status notifications to the organizer's own systems.
+        "ALTER TABLE cohorts ADD COLUMN webhook_url TEXT",
+        "ALTER TABLE cohorts ADD COLUMN webhook_secret TEXT",
+        # Institutional SSO attestation (operator-configured, per cohort).
+        "ALTER TABLE cohorts ADD COLUMN oidc_issuer TEXT",
+        "ALTER TABLE cohorts ADD COLUMN oidc_client_id TEXT",
+        "ALTER TABLE cohorts ADD COLUMN oidc_client_secret TEXT",
+        # API token (hash only) for the organizer REST API.
+        "ALTER TABLE organizers ADD COLUMN api_token_hash BLOB",
     ):
         try:
             conn.execute(ddl)

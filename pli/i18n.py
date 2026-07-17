@@ -499,6 +499,14 @@ STRINGS: dict[str, dict[str, str]] = {
     "reason_other": {
         "en": "other", "fr": "autre", "de": "Sonstiges", "es": "otro", "pt": "outro", "sco": "ither",
     },
+    "sso_link": {
+        "en": "Or sign in through your institution",
+        "fr": "Ou connectez-vous via votre établissement",
+        "de": "Oder über Ihre Einrichtung anmelden",
+        "es": "O accede a través de tu institución",
+        "pt": "Ou entra através da tua instituição",
+        "sco": "Or sign in throu yer institution",
+    },
     "legal_links": {
         "en": "Privacy · Terms", "fr": "Confidentialité · Conditions",
         "de": "Datenschutz · Bedingungen", "es": "Privacidad · Condiciones",

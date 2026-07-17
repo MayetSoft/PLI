@@ -61,9 +61,13 @@ def test_free_plan_limits_enforced_over_http(settings, mailer):
     resp = org.post("/org/events", data=event_form())
     assert "free plan runs 1 event at a time" in resp.text
 
-    # Editing an existing private event to public is gated the same way.
+    # Editing an existing private event to public is gated the same way,
+    # as is attaching a custom domain.
     resp = org.post(f"/org/events/{event_id}/edit",
                     data={**form, "visibility": "public"})
+    assert "pro plan" in resp.text
+    resp = org.post(f"/org/events/{event_id}/edit",
+                    data={**form, "custom_domain": "pact.x.example"})
     assert "pro plan" in resp.text
 
     # Upgrading via a (fake-signed) Stripe webhook lifts both limits.

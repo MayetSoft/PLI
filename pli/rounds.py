@@ -262,13 +262,27 @@ def tick(
     mailer: Mailer,
     now: datetime | None = None,
     pepper: bytes | None = None,
+    notify=None,
 ) -> dict[str, int]:
     """Advance every round that is due, on its own timeline. Run once a
     minute. Replaces fixed cron positions: the schedule lives in the
-    data, not in the crontab."""
+    data, not in the crontab.
+
+    `notify(cohort_id, round_id, status)` — optional, best-effort — is
+    called after each transition so organizer webhooks can fire. It
+    carries lifecycle status only; a raising notifier never blocks the
+    lifecycle."""
     now = (now or paris_now()).astimezone(PARIS)
     stats = {"opened": 0, "closed": 0, "revealed": 0, "voided": 0}
     ensure_weekly_rounds(conn, keystore, now)
+
+    def fire(cohort_id: str, round_id: int, status: str) -> None:
+        if notify is None:
+            return
+        try:
+            notify(cohort_id, round_id, status)
+        except Exception:
+            pass
 
     for row in conn.execute("SELECT * FROM rounds WHERE status = 'scheduled'").fetchall():
         if now >= _dt(row["closes_at"]):
@@ -277,20 +291,28 @@ def tick(
             _purge(conn, row["id"], "voided")
             keystore.destroy(row["id"])
             stats["voided"] += 1
+            fire(row["cohort_id"], row["id"], "voided")
         elif now >= _dt(row["opens_at"]):
             with conn:
                 conn.execute("UPDATE rounds SET status = 'open' WHERE id = ?", (row["id"],))
             keystore.create(row["id"])
             stats["opened"] += 1
+            fire(row["cohort_id"], row["id"], "opened")
 
     for row in conn.execute("SELECT * FROM rounds WHERE status = 'open'").fetchall():
         if now >= _dt(row["closes_at"]):
             outcome = close_round(conn, keystore, row["id"])
-            stats["voided" if outcome == "voided" else "closed"] += 1
+            outcome = "voided" if outcome == "voided" else "closed"
+            stats[outcome] += 1
+            fire(row["cohort_id"], row["id"], outcome)
 
     for row in conn.execute("SELECT * FROM rounds WHERE status = 'closed'").fetchall():
         if now >= _dt(row["reveal_at"]):
             reveal_round(conn, keystore, mailer, row["id"], pepper=pepper)
             stats["revealed"] += 1
+            final = conn.execute(
+                "SELECT status FROM rounds WHERE id = ?", (row["id"],)
+            ).fetchone()["status"]  # 'revealed', or 'voided' if suspended
+            fire(row["cohort_id"], row["id"], final)
 
     return stats

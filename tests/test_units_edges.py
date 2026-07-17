@@ -247,7 +247,7 @@ def test_organizer_unit_edges(app):
 
     assert organizers.ban_organizer(conn, "ghost@x.example") == 0
     assert organizers.slugify(conn, "!!!").startswith("event-")
-    assert organizers.cancel_event(conn, ks, "no-such-event") is False
+    assert organizers.cancel_event(conn, ks, "no-such-event") is None
 
     clean, errors = organizers._parse_config({
         "label": "ok", "description": "d" * 2001, "mail_intro": "m" * 501,

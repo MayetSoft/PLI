@@ -3,7 +3,10 @@
 
 {% if editing %}
 <h2>Configure event</h2>
-<p class="quiet">Share link: {{ base_url }}/e/{{ event_id }}</p>
+<p class="quiet">Share link: {{ base_url }}/e/{{ event_id }}
+· <a href="/e/{{ event_id }}/poster" target="_blank" rel="noopener">printable QR poster</a>
+· <a href="/e/{{ event_id }}/calendar.ics">calendar (.ics)</a>
+{% if sso_enabled %}· institutional SSO is enabled for this event{% endif %}</p>
 {% if suspended %}
 <div class="warn"><p>This event is paused pending review. Joining and
 declaring are disabled; a reveal that falls due while paused is voided —
@@ -48,6 +51,23 @@ deleted, revealing nothing.</p></div>
   {% if editing %}<br><label class="quiet">
     <input type="checkbox" name="remove_join_code" value="1"> remove the join code
   </label>{% endif %}</p>
+
+  <p>Custom domain (pro) — serve this event at your own host<br>
+  <input type="text" name="custom_domain" style="width:100%; font:inherit"
+         placeholder="pact.myconference.com" autocapitalize="none" spellcheck="false"
+         value="{{ form.get('custom_domain', '') }}">
+  <span class="quiet">Point a CNAME at the platform host; the event then
+  answers at that domain's root.</span></p>
+
+  <p>Webhook URL (optional) — we POST round status changes
+  (opened / closed / voided / revealed; statuses only, never counts)<br>
+  <input type="text" name="webhook_url" style="width:100%; font:inherit"
+         placeholder="https://your-system.example/hooks/pli" autocapitalize="none"
+         spellcheck="false" value="{{ form.get('webhook_url', '') }}">
+  {% if editing and webhook_secret %}
+  <span class="quiet">Signature secret (X-PLI-Signature = HMAC-SHA256 of the
+  body): <code>{{ webhook_secret }}</code></span>
+  {% endif %}</p>
 
   <p>Threshold — if fewer sign up, nothing runs and everything is deleted<br>
   <input type="number" name="min_cohort" min="2" required

@@ -73,6 +73,13 @@ def can_request_listing(settings: Settings, organizer: sqlite3.Row) -> str | Non
     return "Public listing is part of the pro plan."
 
 
+def can_use_custom_domain(settings: Settings, organizer: sqlite3.Row) -> str | None:
+    # Same gate as listing: white-label is a pro convenience.
+    if plan_of(settings, organizer)["public_listing"]:
+        return None
+    return "Custom domains are part of the pro plan."
+
+
 def checkout_url(settings: Settings, organizer: sqlite3.Row, opener=None) -> str | None:
     """Create a Stripe Checkout session and return its URL. `opener` is
     injectable for tests; production uses urllib over TLS."""

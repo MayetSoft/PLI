@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import sys
 
-from . import db, rounds
+from . import db, rounds, webhooks
 from .config import Settings
 from .crypto import KeyStore
 from .mailer import make_mailer
@@ -69,7 +69,10 @@ def run_tick(settings: Settings) -> dict[str, int]:
     try:
         db.init_db(conn)
         return rounds.tick(
-            conn, KeyStore(settings.keys_dir), make_mailer(settings), pepper=settings.pepper
+            conn, KeyStore(settings.keys_dir), make_mailer(settings), pepper=settings.pepper,
+            notify=lambda cohort_id, round_id, status: webhooks.notify(
+                conn, cohort_id, round_id, status
+            ),
         )
     finally:
         conn.close()

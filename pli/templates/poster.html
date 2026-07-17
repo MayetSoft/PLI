@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="{{ lang }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>PLI — {{ label }} — poster</title>
+  <style>
+    @page { size: A5; margin: 0; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: #666;
+      font: 16px/1.5 Georgia, "Times New Roman", serif; color: #1c1c1c;
+    }
+    .sheet {
+      width: 148mm; height: 210mm; margin: 1rem auto; background: #fcfcfa;
+      padding: 16mm 14mm; display: flex; flex-direction: column;
+      justify-content: space-between;
+    }
+    .wordmark { letter-spacing: .25em; font-size: 11pt; color: #5f5f5f; }
+    h1 { font-weight: normal; font-size: 24pt; margin: .4em 0 .2em; }
+    .desc { font-size: 12pt; max-width: 100%; }
+    .pitch { font-size: 13pt; font-style: italic; margin: 1.2em 0; }
+    .qr { text-align: center; margin: 4mm 0; }
+    .qr svg { width: 62mm; height: 62mm; }
+    .url { text-align: center; font-size: 11pt; color: #1f4a5f; word-break: break-all; }
+    .small { font-size: 9pt; color: #5f5f5f; }
+    .print-hint { text-align: center; padding: .6rem; font: 14px system-ui, sans-serif; color: #eee; }
+    @media print { body { background: #fff; } .sheet { margin: 0; } .print-hint { display: none; } }
+  </style>
+</head>
+<body>
+  <p class="print-hint">Print this page (Ctrl/Cmd-P) — it is laid out for A5.</p>
+  <div class="sheet">
+    <div>
+      <div class="wordmark">P L I</div>
+      <h1>{{ label }}</h1>
+      {% if description %}<p class="desc">{{ description }}</p>{% endif %}
+      <p class="pitch">{{ t('tagline') }}</p>
+    </div>
+    <div>
+      <div class="qr">{{ qr_svg | safe }}</div>
+      <p class="url">{{ share_url }}</p>
+    </div>
+    <p class="small">{{ t('how3') }} {{ t('how5') }}</p>
+  </div>
+</body>
+</html>

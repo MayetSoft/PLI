@@ -100,8 +100,14 @@ def test_moderation_cli(tmp_path, monkeypatch, capsys):
     cli.main(["blacklist-remove", "--pattern", "bad.example"])
     cli.main(["suppress", "--email", "gone@x.example"])
     cli.main(["suppress", "--email", "not-an-email"])
+    cli.main(["set-oidc", "--id", "party", "--issuer", "https://idp.example",
+              "--client-id", "c", "--client-secret", "s"])
+    assert conn.execute("SELECT oidc_issuer FROM cohorts").fetchone()[0] == "https://idp.example"
+    cli.main(["set-oidc", "--id", "party", "--issuer", ""])
+    assert conn.execute("SELECT oidc_issuer FROM cohorts").fetchone()[0] is None
     out = capsys.readouterr().out
     assert "1 pending" in out and "listing approved" in out
     assert "blacklisted bad.example" in out and "suppressed" in out
     assert "not an email-shaped address" in out
+    assert "SSO enabled" in out and "SSO disabled" in out
     conn.close()

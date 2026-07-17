@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h2>Transparency</h2>
+
+<h2>What is running</h2>
+{% if build_commit or image_digest %}
+<p>This instance attests to the code it runs:</p>
+<ul>
+  {% if build_commit %}<li>Source commit: <code>{{ build_commit }}</code></li>{% endif %}
+  {% if image_digest %}<li>Container image digest: <code>{{ image_digest }}</code></li>{% endif %}
+</ul>
+<p class="quiet">To verify: check out that commit from the public
+repository, build the image, and compare digests — or pull the published
+image by digest and inspect it. "The source is public" is only worth
+something if the <em>running</em> source is the public one.</p>
+{% else %}
+<p class="quiet">Build attestation is not configured on this instance
+(PLI_BUILD_COMMIT / PLI_IMAGE_DIGEST are unset).</p>
+{% endif %}
+
+<h2>Warrant canary</h2>
+{% if canary_updated %}
+<p>As of <strong>{{ canary_updated }}</strong>, {{ company_name }} has
+received <strong>{{ transparency_requests }}</strong> legal demands
+concerning user data, and has never been subject to an order compelling
+it to modify this service to disclose data, nor to a gag order
+preventing it from updating this statement.</p>
+<p class="quiet">This statement is renewed quarterly. If it goes stale
+or disappears, draw your own conclusions — that is what it is for. Note
+also what any demand could yield: outside a live round, nothing exists;
+during one, key-blinded hashes and sealed blobs with a lifespan of
+days.</p>
+{% else %}
+<p class="quiet">The canary is not configured on this instance
+(PLI_CANARY_UPDATED is unset).</p>
+{% endif %}
+
+{% endblock %}

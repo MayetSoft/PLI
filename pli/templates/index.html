@@ -28,6 +28,9 @@
     {% endif %}
     <button type="submit">{{ t('btn_link') }}</button>
   </form>
+  {% if sso_enabled %}
+  <p class="quiet"><a href="{{ base_path }}/sso">{{ t('sso_link') }}</a></p>
+  {% endif %}
 {% elif round_status == 'scheduled' %}
   <p>{{ t('scheduled', opens=opens_fmt, closes=closes_fmt, reveal=reveal_fmt) }}</p>
 {% elif round_status == 'closed' %}

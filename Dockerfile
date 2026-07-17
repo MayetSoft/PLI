@@ -13,7 +13,12 @@ RUN useradd --create-home --uid 10001 pli \
  && mkdir -p /data && chown -R pli:pli /data
 USER pli
 
-ENV PLI_DB=/data/pli.db \
+# Reproducible-build attestation: bake the commit in at build time
+# (docker build --build-arg BUILD_COMMIT=$(git rev-parse HEAD) …) and set
+# PLI_IMAGE_DIGEST at deploy time once the pushed digest is known.
+ARG BUILD_COMMIT=""
+ENV PLI_BUILD_COMMIT=${BUILD_COMMIT} \
+    PLI_DB=/data/pli.db \
     PLI_KEYS_DIR=/data/keys
 
 EXPOSE 8000

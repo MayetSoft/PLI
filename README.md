@@ -120,6 +120,39 @@ The edit page provides the snippet:
   join core as the site: the confirmation view is byte-identical
   whatever was submitted.
 
+## Organizer API, integrations, growth & trust surfaces
+
+- **REST API** (`/api/v1/events`, Bearer token minted on the dashboard —
+  hash-stored, shown once, rotation revokes): list/create/get/patch
+  events, cancel, schedule new rounds. Same guardrails and billing gates
+  as the console; returns a signup count and round status, never more.
+- **iCal**: `GET /e/{id}/calendar.ics` — the round's public timeline
+  (declaration window + reveal) as a subscribable calendar.
+- **QR poster**: `GET /e/{id}/poster` — print-ready A5 with the QR baked
+  in. The flyer is the growth channel; this makes it one click.
+- **Widget auto-resize**: the widget reports its height to the embedding
+  page via `postMessage` (height only, nothing else crosses the frame);
+  parent-side listener snippet in the docs.
+- **Custom domains (pro)**: the organizer CNAMEs `pact.their-conf.com`
+  to the platform; the event answers at that host's root via an internal
+  path rewrite, so every handler and invariant applies unchanged. Add
+  the host to Traefik's certificate config when provisioning.
+- **Outbound webhooks**: optional per-event HTTPS URL receiving round
+  status changes (`opened`/`closed`/`voided`/`revealed`) signed with a
+  per-event secret (`X-PLI-Signature`). Statuses only — never counts.
+  Best-effort: a dead endpoint never delays a reveal.
+- **Transparency page** (`/transparency`): reproducible-build attestation
+  (`PLI_BUILD_COMMIT`, `PLI_IMAGE_DIGEST` — bake the commit in with
+  `docker build --build-arg BUILD_COMMIT=$(git rev-parse HEAD)`) and a
+  quarterly **warrant canary** (`PLI_CANARY_UPDATED`,
+  `PLI_TRANSPARENCY_REQUESTS`). Renewal is the signal; see
+  `docs/transparency.md`.
+- **Institutional SSO attestation**: operator-configured OIDC per cohort
+  (`pli.cli set-oidc`). The institution asserts membership; the verified
+  address is then treated exactly like a typed one — hashed, sealed,
+  destroyed at reveal — and the session starts without a magic-link
+  mail. Nothing from the identity provider is retained.
+
 ## Abuse flags
 
 Every event page carries an anonymous "Report this event" link (reasons:

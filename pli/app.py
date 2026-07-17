@@ -19,15 +19,23 @@ import hmac as hmac_mod
 import json
 import re
 import sqlite3
+import urllib.parse
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import segno
 from fastapi import FastAPI, Form, Request
-from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import (
+    HTMLResponse,
+    JSONResponse,
+    PlainTextResponse,
+    RedirectResponse,
+    Response,
+)
 from fastapi.templating import Jinja2Templates
 
-from . import auth, billing, db, i18n, organizers, rounds, suppression
+from . import auth, billing, db, i18n, organizers, rounds, sso, suppression, webhooks
 from .config import Settings
 from .crypto import KeyStore, handle, seal
 from .mailer import Mail, Mailer, make_mailer
@@ -84,8 +92,36 @@ def create_app(
     app.state.mailer = mailer
     app.state.keystore = keystore
 
+    platform_host = (urllib.parse.urlsplit(settings.base_url).hostname or "").lower()
+
+    def rewrite_custom_domain(request: Request) -> None:
+        """White-label: a pro organizer CNAMEs their host to the platform
+        and the event is served at its root. Implemented as a path
+        rewrite, so every handler, header, and invariant applies
+        unchanged."""
+        host = (request.headers.get("host") or "").split(":")[0].lower()
+        if (
+            not host
+            or host == platform_host
+            or request.scope["path"].startswith(
+                ("/e/", "/s/", "/static/", "/webhooks/", "/api/", "/org", "/oidc")
+            )
+        ):
+            return
+        conn = get_conn()
+        try:
+            row = conn.execute(
+                "SELECT id FROM cohorts WHERE custom_domain = ?", (host,)
+            ).fetchone()
+        finally:
+            conn.close()
+        if row is not None:
+            path = request.scope["path"]
+            request.scope["path"] = f"/e/{row['id']}" + ("" if path == "/" else path)
+
     @app.middleware("http")
     async def security_headers(request: Request, call_next):
+        rewrite_custom_domain(request)
         response = await call_next(request)
         if request.url.path.endswith("/widget"):
             # The embed widget is the one surface meant to be framed by
@@ -161,6 +197,7 @@ def create_app(
             description=cohort["description"] if cohort else "",
             suspended=bool(cohort and cohort["is_suspended"]),
             join_code_required=bool(cohort and cohort["join_code_hash"]),
+            sso_enabled=bool(cohort and cohort["oidc_issuer"] and cohort["id"] != settings.cohort_id),
             round_status=status,
             opens_fmt=fmt_paris(latest["opens_at"]) if latest else "",
             closes_fmt=fmt_paris(latest["closes_at"]) if latest else "",
@@ -482,6 +519,170 @@ def create_app(
         finally:
             conn.close()
 
+    # ---- widget auto-resize helper (child side) ---------------------------
+
+    EMBED_JS = (Path(__file__).parent / "static" / "pli-embed.js").read_text()
+
+    @app.get("/static/pli-embed.js")
+    def embed_js():
+        return Response(
+            EMBED_JS, media_type="text/javascript",
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
+
+    # ---- iCal feed ----------------------------------------------------------
+
+    def _ics_dt(iso: str) -> str:
+        return datetime.fromisoformat(iso).astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+    def _ics_escape(text: str) -> str:
+        return text.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\n", "\\n")
+
+    @app.get("/e/{event_id}/calendar.ics")
+    def event_calendar(request: Request, event_id: str):
+        """Public timeline of the current round — the same three instants
+        the event page shows, in a subscribable form."""
+        conn = get_conn()
+        try:
+            cohort = resolve_event(conn, event_id)
+            if cohort is None or event_id == settings.cohort_id:
+                return PlainTextResponse("not found", status_code=404)
+            latest = rounds.latest_round(conn, event_id)
+            label = _ics_escape(cohort["label"])
+            lines = [
+                "BEGIN:VCALENDAR",
+                "VERSION:2.0",
+                "PRODID:-//PLI//round timeline//EN",
+                "CALSCALE:GREGORIAN",
+            ]
+            if latest is not None and latest["status"] in ("scheduled", "open", "closed"):
+                reveal_end = datetime.fromisoformat(latest["reveal_at"]) + timedelta(minutes=15)
+                lines += [
+                    "BEGIN:VEVENT",
+                    f"UID:round-{latest['id']}-window@pli",
+                    f"DTSTART:{_ics_dt(latest['opens_at'])}",
+                    f"DTEND:{_ics_dt(latest['closes_at'])}",
+                    f"SUMMARY:{label} — declarations open",
+                    f"URL:{settings.base_url}/e/{event_id}",
+                    "END:VEVENT",
+                    "BEGIN:VEVENT",
+                    f"UID:round-{latest['id']}-reveal@pli",
+                    f"DTSTART:{_ics_dt(latest['reveal_at'])}",
+                    f"DTEND:{reveal_end.astimezone(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}",
+                    f"SUMMARY:{label} — reveal",
+                    f"URL:{settings.base_url}/e/{event_id}",
+                    "END:VEVENT",
+                ]
+            lines.append("END:VCALENDAR")
+            return Response("\r\n".join(lines) + "\r\n", media_type="text/calendar")
+        finally:
+            conn.close()
+
+    # ---- QR poster ------------------------------------------------------------
+
+    @app.get("/e/{event_id}/poster", response_class=HTMLResponse)
+    def event_poster(request: Request, event_id: str):
+        """A print-ready A5 with the QR baked in. The flyer is the growth
+        channel; this makes it a one-click artifact."""
+        conn = get_conn()
+        try:
+            cohort = resolve_event(conn, event_id)
+            if cohort is None or event_id == settings.cohort_id or cohort["is_suspended"]:
+                return render("not_found.html", request, status_code=404)
+            share_url = f"{settings.base_url}/e/{event_id}"
+            qr_svg = segno.make(share_url, error="q").svg_inline(scale=4, dark="#1c1c1c")
+            return render(
+                "poster.html", request,
+                label=cohort["label"],
+                description=cohort["description"],
+                share_url=share_url,
+                qr_svg=qr_svg,
+            )
+        finally:
+            conn.close()
+
+    # ---- transparency: build attestation + warrant canary ----------------------
+
+    @app.get("/transparency", response_class=HTMLResponse)
+    def transparency(request: Request):
+        return render(
+            "transparency.html", request,
+            company_name=settings.company_name,
+            build_commit=settings.build_commit,
+            image_digest=settings.image_digest,
+            canary_updated=settings.canary_updated,
+            transparency_requests=settings.transparency_requests,
+        )
+
+    # ---- institutional SSO attestation ------------------------------------------
+
+    def oidc_redirect_uri() -> str:
+        return f"{settings.base_url}/oidc/callback"
+
+    @app.get("/e/{event_id}/sso")
+    def event_sso(request: Request, event_id: str):
+        conn = get_conn()
+        try:
+            cohort = resolve_event(conn, event_id)
+            if (
+                cohort is None or event_id == settings.cohort_id
+                or not cohort["oidc_issuer"] or cohort["is_suspended"]
+            ):
+                return render("not_found.html", request, status_code=404)
+            try:
+                url = sso.auth_url(cohort, settings.pepper, oidc_redirect_uri())
+            except Exception:
+                return render("link_invalid.html", request)  # issuer unreachable
+            return RedirectResponse(url, status_code=303)
+        finally:
+            conn.close()
+
+    @app.get("/oidc/callback", response_class=HTMLResponse)
+    def oidc_callback(request: Request, code: str = "", state: str = ""):
+        """The institution said 'member'. From here the address is treated
+        exactly like a typed /join address — hashed, sealed, gone at
+        reveal — except no magic-link mail is needed: the session starts
+        now."""
+        conn = get_conn()
+        try:
+            cohort_id = sso.verify_state(settings.pepper, state)
+            if not cohort_id or not code:
+                return render("link_invalid.html", request)
+            cohort = get_cohort(conn, cohort_id)
+            if cohort is None or cohort["is_suspended"] or not cohort["oidc_issuer"]:
+                return render("link_invalid.html", request)
+            open_round = rounds.current_open_round(conn, cohort_id)
+            if open_round is None:
+                return render("link_invalid.html", request)
+            email = sso.fetch_verified_email(cohort, code, oidc_redirect_uri())
+            if not email or not is_rfc_shaped(email):
+                return render("link_invalid.html", request)
+            norm = normalise_email(email)
+            if suppression.is_suppressed(conn, settings.pepper, norm):
+                return render("link_invalid.html", request)
+            h = handle(settings.pepper, norm)
+            round_key = keystore.load(open_round["id"])
+            if round_key is None:
+                return render("link_invalid.html", request)
+            with conn:
+                conn.execute(
+                    "INSERT OR IGNORE INTO participants (round_id, handle, contact) VALUES (?, ?, ?)",
+                    (open_round["id"], h, seal(round_key, norm)),
+                )
+            cookie_name, base_path = cookie_and_home(cohort_id)
+            response = RedirectResponse(f"{base_path}/declare", status_code=303)
+            response.set_cookie(
+                cookie_name,
+                auth.sign_session(settings.pepper, open_round["id"], h),
+                max_age=int(auth.SESSION_TTL.total_seconds()),
+                httponly=True,
+                samesite="lax",
+                secure=settings.secure_cookies,
+            )
+            return response
+        finally:
+            conn.close()
+
     # ---- abuse flags ------------------------------------------------------
 
     @app.get("/e/{event_id}/report", response_class=HTMLResponse)
@@ -543,6 +744,8 @@ def create_app(
             "visibility": cohort["visibility"],
             "domains": ", ".join(json.loads(cohort["email_domains"])),
             "join_code": "",
+            "custom_domain": cohort["custom_domain"] or "",
+            "webhook_url": cohort["webhook_url"] or "",
             "min_cohort": cohort["min_cohort"],
             "opens": local(round_row["opens_at"]) if round_row else "",
             "closes": local(round_row["closes_at"]) if round_row else "",
@@ -748,6 +951,10 @@ def create_app(
                 reason = billing.can_request_listing(settings, org)
                 if reason:
                     errors.append(reason)
+            if form.get("custom_domain"):
+                reason = billing.can_use_custom_domain(settings, org)
+                if reason:
+                    errors.append(reason)
             event_id = None
             if not errors:
                 event_id, errors = organizers.create_event(
@@ -781,6 +988,8 @@ def create_app(
                 errors=[], round=round_row, editing=True,
                 event_id=event_id, base_url=settings.base_url,
                 suspended=bool(cohort["is_suspended"]),
+                webhook_secret=cohort["webhook_secret"] or "",
+                sso_enabled=bool(cohort["oidc_issuer"]),
             )
         finally:
             conn.close()
@@ -799,6 +1008,10 @@ def create_app(
             errors = []
             if form.get("visibility") == "public" and cohort["visibility"] != "public":
                 reason = billing.can_request_listing(settings, org)
+                if reason:
+                    errors.append(reason)
+            if form.get("custom_domain") and form.get("custom_domain") != (cohort["custom_domain"] or ""):
+                reason = billing.can_use_custom_domain(settings, org)
                 if reason:
                     errors.append(reason)
             if not errors:
@@ -826,7 +1039,9 @@ def create_app(
             cohort = owned_event(conn, org, event_id)
             if cohort is None:
                 return render("not_found.html", request, status_code=404)
-            organizers.cancel_event(conn, keystore, event_id)
+            voided_round = organizers.cancel_event(conn, keystore, event_id)
+            if voided_round is not None:
+                webhooks.notify(conn, event_id, voided_round, "voided")
             return RedirectResponse("/org/dashboard", status_code=303)
         finally:
             conn.close()
@@ -853,6 +1068,193 @@ def create_app(
                     suspended=bool(cohort["is_suspended"]),
                 )
             return RedirectResponse("/org/dashboard", status_code=303)
+        finally:
+            conn.close()
+
+    @app.post("/org/api-token", response_class=HTMLResponse)
+    def org_api_token(request: Request):
+        """Mint or rotate the API token; shown once, stored as a hash."""
+        conn = get_conn()
+        try:
+            org = current_organizer(request, conn)
+            if org is None:
+                return RedirectResponse("/org", status_code=303)
+            token = organizers.issue_api_token(conn, org["id"])
+            events = organizers.organizer_events(conn, org["id"])
+            return render(
+                "org_dashboard.html", request,
+                org=org, events=events, base_url=settings.base_url,
+                billing_on=billing.enforced(settings),
+                is_free=(org["plan"] == "free"),
+                api_token=token,
+            )
+        finally:
+            conn.close()
+
+    # ---- organizer REST API -------------------------------------------------
+
+    def api_organizer(request: Request, conn) -> sqlite3.Row | None:
+        header = request.headers.get("authorization", "")
+        if not header.lower().startswith("bearer "):
+            return None
+        return organizers.organizer_by_token(conn, header[7:].strip())
+
+    def api_event_json(conn, cohort: sqlite3.Row) -> dict:
+        round_row = rounds.latest_round(conn, cohort["id"])
+        participants = 0
+        if round_row is not None and round_row["status"] in organizers.ACTIVE_ROUND_STATUSES:
+            participants = conn.execute(
+                "SELECT COUNT(*) AS n FROM participants WHERE round_id = ?",
+                (round_row["id"],),
+            ).fetchone()["n"]
+        return {
+            "id": cohort["id"],
+            "label": cohort["label"],
+            "visibility": cohort["visibility"],
+            "listing_status": cohort["listing_status"],
+            "suspended": bool(cohort["is_suspended"]),
+            "custom_domain": cohort["custom_domain"],
+            "share_url": f"{settings.base_url}/e/{cohort['id']}",
+            "widget_url": f"{settings.base_url}/e/{cohort['id']}/widget",
+            "calendar_url": f"{settings.base_url}/e/{cohort['id']}/calendar.ics",
+            "min_cohort": cohort["min_cohort"],
+            "round": None if round_row is None else {
+                "status": round_row["status"],
+                "opens_at": round_row["opens_at"],
+                "closes_at": round_row["closes_at"],
+                "reveal_at": round_row["reveal_at"],
+            },
+            # A count and a status. Deliberately nothing else, on any plan.
+            "participants": participants,
+        }
+
+    async def api_form(request: Request) -> dict:
+        try:
+            body = await request.json()
+            if not isinstance(body, dict):
+                return {}
+            return {k: str(v) for k, v in body.items()}
+        except Exception:
+            return {}
+
+    @app.get("/api/v1/events")
+    def api_list_events(request: Request):
+        conn = get_conn()
+        try:
+            org = api_organizer(request, conn)
+            if org is None:
+                return JSONResponse({"errors": ["invalid token"]}, status_code=401)
+            events = [
+                api_event_json(conn, e["cohort"])
+                for e in organizers.organizer_events(conn, org["id"])
+            ]
+            return JSONResponse({"events": events})
+        finally:
+            conn.close()
+
+    @app.post("/api/v1/events")
+    async def api_create_event(request: Request):
+        conn = get_conn()
+        try:
+            org = api_organizer(request, conn)
+            if org is None:
+                return JSONResponse({"errors": ["invalid token"]}, status_code=401)
+            form = await api_form(request)
+            errors = []
+            for check in (
+                billing.can_create_event(settings, conn, org),
+                billing.can_request_listing(settings, org) if form.get("visibility") == "public" else None,
+                billing.can_use_custom_domain(settings, org) if form.get("custom_domain") else None,
+            ):
+                if check:
+                    errors.append(check)
+            event_id = None
+            if not errors:
+                event_id, errors = organizers.create_event(
+                    conn, keystore, settings.pepper, org["id"], form
+                )
+            if errors:
+                return JSONResponse({"errors": errors}, status_code=422)
+            cohort = get_cohort(conn, event_id)
+            return JSONResponse({"event": api_event_json(conn, cohort)}, status_code=201)
+        finally:
+            conn.close()
+
+    def api_owned(request: Request, conn, event_id: str):
+        org = api_organizer(request, conn)
+        if org is None:
+            return None, JSONResponse({"errors": ["invalid token"]}, status_code=401)
+        cohort = owned_event(conn, org, event_id)
+        if cohort is None:
+            return None, JSONResponse({"errors": ["not found"]}, status_code=404)
+        return (org, cohort), None
+
+    @app.get("/api/v1/events/{event_id}")
+    def api_get_event(request: Request, event_id: str):
+        conn = get_conn()
+        try:
+            found, error = api_owned(request, conn, event_id)
+            if error:
+                return error
+            _, cohort = found
+            return JSONResponse({"event": api_event_json(conn, cohort)})
+        finally:
+            conn.close()
+
+    @app.patch("/api/v1/events/{event_id}")
+    async def api_update_event(request: Request, event_id: str):
+        conn = get_conn()
+        try:
+            found, error = api_owned(request, conn, event_id)
+            if error:
+                return error
+            org, cohort = found
+            form = await api_form(request)
+            errors = []
+            if form.get("visibility") == "public" and cohort["visibility"] != "public":
+                check = billing.can_request_listing(settings, org)
+                if check:
+                    errors.append(check)
+            if form.get("custom_domain") and form.get("custom_domain") != (cohort["custom_domain"] or ""):
+                check = billing.can_use_custom_domain(settings, org)
+                if check:
+                    errors.append(check)
+            if not errors:
+                errors = organizers.update_event(conn, keystore, settings.pepper, cohort, form)
+            if errors:
+                return JSONResponse({"errors": errors}, status_code=422)
+            return JSONResponse({"event": api_event_json(conn, get_cohort(conn, event_id))})
+        finally:
+            conn.close()
+
+    @app.post("/api/v1/events/{event_id}/cancel")
+    def api_cancel_event(request: Request, event_id: str):
+        conn = get_conn()
+        try:
+            found, error = api_owned(request, conn, event_id)
+            if error:
+                return error
+            voided_round = organizers.cancel_event(conn, keystore, event_id)
+            if voided_round is not None:
+                webhooks.notify(conn, event_id, voided_round, "voided")
+            return JSONResponse({"cancelled": voided_round is not None})
+        finally:
+            conn.close()
+
+    @app.post("/api/v1/events/{event_id}/rounds")
+    async def api_new_round(request: Request, event_id: str):
+        conn = get_conn()
+        try:
+            found, error = api_owned(request, conn, event_id)
+            if error:
+                return error
+            form = await api_form(request)
+            errors = organizers.schedule_new_round(conn, keystore, event_id, form)
+            if errors:
+                return JSONResponse({"errors": errors}, status_code=422)
+            return JSONResponse(
+                {"event": api_event_json(conn, get_cohort(conn, event_id))}, status_code=201
+            )
         finally:
             conn.close()
 

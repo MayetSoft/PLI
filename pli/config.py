@@ -39,6 +39,11 @@ class Settings:
     company_address: str = "[REGISTERED ADDRESS]"
     company_siren: str = "[SIREN]"
     company_contact: str = "[CONTACT EMAIL]"
+    # Transparency page: reproducible-build attestation + warrant canary.
+    build_commit: str = ""
+    image_digest: str = ""
+    canary_updated: str = ""          # date of the last canary statement
+    transparency_requests: str = "0"  # legal demands received to date
     extra: dict = field(default_factory=dict)
 
     @classmethod
@@ -71,4 +76,8 @@ class Settings:
             company_address=os.environ.get("PLI_COMPANY_ADDRESS", "[REGISTERED ADDRESS]"),
             company_siren=os.environ.get("PLI_COMPANY_SIREN", "[SIREN]"),
             company_contact=os.environ.get("PLI_COMPANY_CONTACT", "[CONTACT EMAIL]"),
+            build_commit=os.environ.get("PLI_BUILD_COMMIT", ""),
+            image_digest=os.environ.get("PLI_IMAGE_DIGEST", ""),
+            canary_updated=os.environ.get("PLI_CANARY_UPDATED", ""),
+            transparency_requests=os.environ.get("PLI_TRANSPARENCY_REQUESTS", "0"),
         )

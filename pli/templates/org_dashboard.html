@@ -37,6 +37,17 @@
 
 <p><a href="/org/events/new">Create an event</a></p>
 
+<hr class="rule">
+<h2>API</h2>
+{% if api_token %}
+<div class="warn"><p>Your API token — shown once, store it now:<br>
+<code>{{ api_token }}</code></p></div>
+{% endif %}
+<p class="quiet">The REST API lives under <code>/api/v1/events</code>
+(Bearer token). Generating a new token revokes the old one.</p>
+<form method="post" action="/org/api-token"><button type="submit">Generate API token</button></form>
+
+<hr class="rule">
 <form method="post" action="/org/logout"><button type="submit">Sign out</button></form>
 
 {% endblock %}

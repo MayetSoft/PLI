@@ -21,6 +21,7 @@ are not theirs to weaken, which is why edits are guardrailed:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import secrets
@@ -62,6 +63,28 @@ def get_organizer(conn: sqlite3.Connection, organizer_id: int) -> sqlite3.Row | 
 
 def organizer_by_email(conn: sqlite3.Connection, email: str) -> sqlite3.Row | None:
     return conn.execute("SELECT * FROM organizers WHERE email = ?", (email,)).fetchone()
+
+
+def issue_api_token(conn: sqlite3.Connection, organizer_id: int) -> str:
+    """Mint (and rotate) the organizer's API token. Only its hash is
+    stored; the token is shown once."""
+    token = "pli_" + secrets.token_urlsafe(32)
+    with conn:
+        conn.execute(
+            "UPDATE organizers SET api_token_hash = ? WHERE id = ?",
+            (hashlib.sha256(token.encode()).digest(), organizer_id),
+        )
+    return token
+
+
+def organizer_by_token(conn: sqlite3.Connection, token: str) -> sqlite3.Row | None:
+    row = conn.execute(
+        "SELECT * FROM organizers WHERE api_token_hash = ?",
+        (hashlib.sha256(token.encode()).digest(),),
+    ).fetchone()
+    if row is None or row["status"] != "active":
+        return None
+    return row
 
 
 def is_blacklisted(conn: sqlite3.Connection, email: str) -> bool:
@@ -154,6 +177,16 @@ def _parse_config(form: dict) -> tuple[dict, list[str]]:
         errors.append(f"The threshold must be at least {MIN_COHORT_FLOOR}.")
     clean["min_cohort"] = min_cohort
 
+    custom_domain = (form.get("custom_domain") or "").strip().lower()
+    if custom_domain and not re.fullmatch(r"[a-z0-9.-]+\.[a-z]{2,}", custom_domain):
+        errors.append("The custom domain is not a valid host name.")
+    clean["custom_domain"] = custom_domain
+
+    webhook_url = (form.get("webhook_url") or "").strip()
+    if webhook_url and not webhook_url.startswith("https://"):
+        errors.append("The webhook URL must use https.")
+    clean["webhook_url"] = webhook_url
+
     for field in ("opens", "closes", "reveal"):
         raw = (form.get(field) or "").strip()
         try:
@@ -204,6 +237,11 @@ def create_event(
                 conn.execute(
                     "UPDATE cohorts SET listing_status = 'pending' WHERE id = ?", (event_id,)
                 )
+        extra_errors = _apply_integrations(conn, event_id, clean)
+        if extra_errors:
+            with conn:
+                conn.execute("DELETE FROM cohorts WHERE id = ?", (event_id,))
+            return None, extra_errors
         rounds.schedule_round(
             conn, keystore, event_id, clean["opens"], clean["closes"], clean["reveal"]
         )
@@ -212,6 +250,29 @@ def create_event(
             conn.execute("DELETE FROM cohorts WHERE id = ?", (event_id,))
         return None, [str(exc)]
     return event_id, []
+
+
+def _apply_integrations(conn: sqlite3.Connection, cohort_id: str, clean: dict) -> list[str]:
+    """Custom domain (uniqueness enforced) and outbound webhook (a signing
+    secret is minted the first time a URL is set)."""
+    if clean["custom_domain"]:
+        clash = conn.execute(
+            "SELECT 1 FROM cohorts WHERE custom_domain = ? AND id != ?",
+            (clean["custom_domain"], cohort_id),
+        ).fetchone()
+        if clash is not None:
+            return ["That custom domain is already in use."]
+    with conn:
+        conn.execute(
+            "UPDATE cohorts SET custom_domain = ?, webhook_url = ? WHERE id = ?",
+            (clean["custom_domain"] or None, clean["webhook_url"] or None, cohort_id),
+        )
+        if clean["webhook_url"]:
+            conn.execute(
+                "UPDATE cohorts SET webhook_secret = ? WHERE id = ? AND webhook_secret IS NULL",
+                (secrets.token_hex(16), cohort_id),
+            )
+    return []
 
 
 def active_round(conn: sqlite3.Connection, cohort_id: str) -> sqlite3.Row | None:
@@ -320,17 +381,17 @@ def update_event(
                 f"UPDATE rounds SET {sets} WHERE id = ?",
                 (*(d.isoformat() for d in new_times.values()), round_row["id"]),
             )
-    return []
+    return _apply_integrations(conn, cohort["id"], clean)
 
 
-def cancel_event(conn: sqlite3.Connection, keystore: KeyStore, cohort_id: str) -> bool:
+def cancel_event(conn: sqlite3.Connection, keystore: KeyStore, cohort_id: str) -> int | None:
     """Void the active round: delete everything, reveal nothing, notify
-    nobody. Returns True if a round was voided."""
+    no participant. Returns the voided round id, or None."""
     round_row = active_round(conn, cohort_id)
     if round_row is None:
-        return False
+        return None
     rounds.void_round(conn, keystore, round_row["id"])
-    return True
+    return round_row["id"]
 
 
 def schedule_new_round(

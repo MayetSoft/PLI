@@ -160,6 +160,7 @@ def create_app(
         lang = pick_lang(request)
         context.setdefault("lang", lang)
         context.setdefault("languages", i18n.LANGUAGES)
+        context.setdefault("source_url", settings.source_url)
         context.setdefault("t", lambda key, **kw: i18n.translate(lang, key, **kw))
         response = templates.TemplateResponse(
             request=request, name=name, context=context, status_code=status_code

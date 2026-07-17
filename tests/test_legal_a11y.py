@@ -5,6 +5,7 @@ import dataclasses
 from fastapi.testclient import TestClient
 
 from pli.app import create_app
+from pli.mailer import RecordingMailer
 
 
 def test_legal_pages_en_and_fr(app, mailer):
@@ -32,6 +33,25 @@ def test_legal_pages_render_company_identity(settings, mailer):
     assert "privacy@plicorp.example" in page
     fr = client.get("/legal/dpa?lang=fr").text
     assert "Plicorp SASU" in fr
+
+
+def test_agpl_source_offer_in_every_footer(app, mailer):
+    """AGPL §13: remote users get an offer of the Corresponding Source.
+    Every page footer carries it."""
+    page = TestClient(app).get("/")
+    assert "Source (AGPL)" in page.text
+    assert "github.com/MayetSoft/SecretCrush" in page.text
+    assert "Source (AGPL)" in TestClient(app).get("/transparency").text
+
+    s = dataclasses.replace(TestClient(app).app.state.settings, source_url="https://forge.example/fork")
+    forked = TestClient(create_app(settings=s, mailer=RecordingMailer())).get("/about")
+    assert "https://forge.example/fork" in forked.text
+
+
+def test_transparency_states_the_open_core_boundary(app, mailer):
+    page = TestClient(app).get("/transparency").text
+    assert "Nothing a participant experiences depends on closed code" in page
+    assert "AGPL" in page
 
 
 def test_accessibility_contract(app, mailer):

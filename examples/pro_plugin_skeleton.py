@@ -1,3 +1,10 @@
+# SPDX-License-Identifier: 0BSD
+# This skeleton file (alone, not the pli package it imports) is released
+# under the Zero-Clause BSD license: copy it into your private plugin
+# repository without restriction. Distribution or network use of a
+# combined work with the AGPL core is governed by the core's license —
+# the platform's copyright holder can license its own proprietary
+# plugin; third parties should read LICENSE and talk to counsel.
 """Skeleton for a private billing/entitlements plugin (the closed half
 of the open-core split).
 

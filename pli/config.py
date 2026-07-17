@@ -44,6 +44,9 @@ class Settings:
     company_address: str = "[REGISTERED ADDRESS]"
     company_siren: str = "[SIREN]"
     company_contact: str = "[CONTACT EMAIL]"
+    # AGPL §13: every page links the Corresponding Source for the code
+    # actually running. Point this at your fork if you modify anything.
+    source_url: str = "https://github.com/MayetSoft/SecretCrush"
     # Transparency page: reproducible-build attestation + warrant canary.
     build_commit: str = ""
     image_digest: str = ""
@@ -82,6 +85,7 @@ class Settings:
             company_address=os.environ.get("PLI_COMPANY_ADDRESS", "[REGISTERED ADDRESS]"),
             company_siren=os.environ.get("PLI_COMPANY_SIREN", "[SIREN]"),
             company_contact=os.environ.get("PLI_COMPANY_CONTACT", "[CONTACT EMAIL]"),
+            source_url=os.environ.get("PLI_SOURCE_URL", "https://github.com/MayetSoft/SecretCrush"),
             build_commit=os.environ.get("PLI_BUILD_COMMIT", ""),
             image_digest=os.environ.get("PLI_IMAGE_DIGEST", ""),
             canary_updated=os.environ.get("PLI_CANARY_UPDATED", ""),

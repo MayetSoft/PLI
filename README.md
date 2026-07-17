@@ -251,6 +251,25 @@ docker compose exec pli python -m pli.cli create-cohort \
 - Round keys live as files under `PLI_KEYS_DIR`, are destroyed at reveal,
   and must be excluded from any host-level backup along with the DB.
 
+## License
+
+The platform is licensed under the **AGPL-3.0** (see `LICENSE`):
+anyone may run, study, and modify it, and anyone offering a modified
+version over a network must publish their modifications — which is
+exactly the property the trust model depends on. Every page footer
+links the Corresponding Source (`PLI_SOURCE_URL`; point it at your fork
+if you change anything), as §13 requires.
+
+The copyright holder ([COMPANY NAME] SASU) retains the right to license
+its own code otherwise — which is what allows the private billing
+plugin (`PLI_BILLING_PLUGIN`) alongside the AGPL core. To preserve that
+right, external contributions are accepted only with a DCO sign-off
+(`git commit -s`) or CLA. `examples/pro_plugin_skeleton.py` is 0BSD so
+it can be copied into a private plugin repository freely; third parties
+building closed plugins against the AGPL core should read the license
+and consult counsel — the carve-out is the copyright holder's, not a
+general exception.
+
 ## Trust model (v1, stated honestly)
 
 Addresses are stored as `HMAC-SHA256(pepper, email)` handles plus

@@ -50,6 +50,18 @@ def test_language_negotiation_over_http(app, mailer):
     assert "A round is open. It steeks Friday" in scots.text
 
 
+def test_tier1_completion_languages(app, mailer):
+    """Italian, Dutch, Polish reach the participant flow like the rest."""
+    for code in ("it", "nl", "pl"):
+        assert code in i18n.LANGUAGES
+    assert "Un turno è aperto" in TestClient(app).get("/?lang=it").text
+    assert "Er is een ronde open" in TestClient(app).get("/?lang=nl").text
+    assert "Runda jest otwarta" in TestClient(app).get("/?lang=pl").text
+    # Accept-Language negotiation picks them up too.
+    it = TestClient(app).get("/", headers={"accept-language": "it-IT,it;q=0.9"})
+    assert 'lang="it"' in it.text
+
+
 def test_full_participant_flow_in_french(app, mailer):
     from conftest import signup, declare, DOMAIN
 

@@ -209,11 +209,14 @@ python -m pli.cli ban-organizer --email <address>   # bans + suspends their even
   GDPR working papers (Art. 30 register, retention register, DPIA,
   sub-processors) live in `docs/gdpr/`. **All of it is a serious draft,
   not legal advice — have French counsel review before launch.**
-- **i18n** — participant pages ship in English, French, German, Spanish,
-  Portuguese, and Scots (`?lang=fr|de|es|pt|sco`, persisted in a cookie,
-  Accept-Language honoured). The catalogue is completeness-tested. The
-  non-French translations are machine-drafted: **have native speakers
-  review them**, especially every sentence carrying a safety promise.
+- **i18n** — participant pages ship in nine languages: English, French,
+  German, Spanish, Portuguese, Italian, Dutch, Polish, and Scots
+  (`?lang=fr|de|es|pt|it|nl|pl|sco`, persisted in a cookie,
+  Accept-Language honoured). The eight European languages are the
+  Tier-1/Tier-1-completion launch set; Scots is a novelty. The catalogue
+  is completeness-tested (a missing string fails CI). Every non-French
+  translation is machine-drafted: **have native speakers review them
+  before launch**, especially every sentence carrying a safety promise.
   Organizer console is English-only for now.
 - **Accessibility** — skip link, landmarks, labelled controls,
   focus-visible outlines, WCAG AA contrast, `lang` attribute per page.

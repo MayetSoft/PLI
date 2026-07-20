@@ -12,3 +12,4 @@ keys/
 *.db-wal
 *.db-shm
 .env
+.coverage
